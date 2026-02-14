@@ -94,13 +94,15 @@ obstacle = Mesh(filename=filepath,
                 pose=T,
                 scale=[0.001,0.001,0.001])
 
-# Connect to GUI
-bc = bullet_client.BulletClient(connection_mode=p.GUI)
-
+# Connect in DIRECT mode (no GUI)
+#pybul_start = p.connect(p.GUI)
+physicsClient = p.connect(p.DIRECT)
 # Optional: set search path for meshes
-bc.setAdditionalSearchPath(pybullet_data.getDataPath())
+p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
-robot=bc.loadURDF(matlab+"imed_robot.urdf")
+robotId=p.loadURDF(matlab+"imed_robot.urdf",
+                   flags = p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
+                   )
 position = [0.35, 0.35, -0.55]        # must be length 3
 # Axis-angle
 angle = -np.pi/4              # rotation angle in radians
@@ -110,26 +112,24 @@ axis = axis / np.linalg.norm(axis)  # just to be safe
 # Convert to quaternion
 r = R.from_rotvec(axis * angle)  # axis-angle → rotation vector
 orientation = r.as_quat()
-scale = [1,1,1]  # must be length 3
+scale = [0.001,0.001,0.001]  # must be length 3
 # Create collision shape and visual shape
-collisionShapeId = p.createCollisionShape(shapeType=bc.GEOM_MESH,
+collisionShapeId = p.createCollisionShape(shapeType=p.GEOM_MESH,
                                           fileName='voxel_alpha.stl',
                                           meshScale=scale)
-visualShapeId = bc.createVisualShape(shapeType=bc.GEOM_MESH,
+visualShapeId = p.createVisualShape(shapeType=p.GEOM_MESH,
                                     fileName='voxel_alpha.stl',
                                     meshScale=scale)
 
 # Create a multi-body using the mesh
-obstacleId = bc.createMultiBody(baseMass=0,
+obstacleId = p.createMultiBody(baseMass=0,
                                 baseCollisionShapeIndex=collisionShapeId,
                                 baseVisualShapeIndex=visualShapeId,
                                 basePosition=position,
-                                baseOrientation=orientation)
+                                baseOrientation=orientation
+                               )
 
-# Let the GUI run
-while True:
-    bc.stepSimulation()
-    time.sleep(1./240.)
+
 
 # Load URDF of Robot
 robot = rtb.Robot.URDF(matlab + "imed_robot.urdf")
@@ -208,10 +208,7 @@ for i in range(waypoints):
     robot.fkine(qIK)
     J = robot.jacob0(qIK, endEffector)
     N = np.eye(len(qIK)) - np.linalg.pinv(J) @ J
-    collision = robot.iscollided(qIK, obstacle)
-    if collision:
-        print('collision!')
-        a+=1
+
     # damped least Square
     T_current = robot.fkine(qIK)
     dx_pos = T_target.t - T_current.t  # 3x1 vector
@@ -255,3 +252,65 @@ absDeltaJointDeg = np.abs(deltaJointDeg)
 # --- Final smooth trajectory ---
 allConfigTraj = np.hstack((configTraj, velJointTraj))
 np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
+
+#--------------------#
+#  COLLISION CHECK   #
+#--------------------#
+
+# Get joint indices
+num_joints = p.getNumJoints(robotId)
+joint_indices = list(range(num_joints))
+
+for waypoints, joint_positions in enumerate(configTraj):
+    # Set joint positions (robot, joint(i), theta)
+    for joint_index, joint_value in zip(joint_indices, joint_positions):
+        p.resetJointState(robotId, joint_index, joint_value)
+
+    # --- Environment collision ---
+    contacts_env = p.getClosestPoints(robotId, obstacleId, distance=0)
+
+    # --- Self collision ---
+    contacts_self_raw = p.getClosestPoints(robotId, robotId, distance=0)
+
+
+
+    # Remove trivial contacts (same link pairs)
+    contacts_self = []
+    unique_pairs = set()
+    ee_link = 7
+    for c in contacts_self_raw:
+        linkA =c[3]
+        linkB =c[4]
+
+        # Only care if EE is involved
+        if ee_link not in (linkA, linkB):
+            continue
+
+        # Identify the "other" link
+        other_link = linkB if linkA == ee_link else linkA
+
+        # Ignore same link
+        if other_link == ee_link:
+            continue
+
+        # Ignore parent-child contact
+        parent = p.getJointInfo(robotId, ee_link)[16]
+        if other_link == parent:
+            continue
+
+        pair = tuple(sorted((ee_link, other_link)))
+
+        if pair not in unique_pairs:
+            unique_pairs.add(pair)
+            print(f"End-effector collides with link {other_link}")
+    if contacts_env or contacts_self:
+        print(f"Collision at waypoint {waypoints}")
+
+        if contacts_env:
+            print("  → Environment collision")
+
+        if contacts_self:
+            print("  → Self collision")
+    else:
+        print(f"Waypoint {waypoints} is collision-free")
+    
