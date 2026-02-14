@@ -5,16 +5,21 @@ from scipy.interpolate import CubicSpline
 from scipy.spatial.transform import Rotation as R
 from roboticstoolbox import Robot
 from spatialmath import SE3
-import numpy as np
-import qpsolvers
+from spatialgeometry import Mesh
+from scipy.spatial.transform import Slerp
+import trimesh
+import pybullet as p
+import pybullet_data
+import time
+from pybullet_utils import bullet_client
 
+matlab = "/Users/kim/Documents/MATLAB/New Folder/path_planning/"
 
-def mapToNearest(robot, q_prev, q_new):
+def mapToNearest( q_prev, q_new):
     """
     Map q_new to the nearest equivalent configuration relative to q_prev.
 
     Parameters:
-        robot : roboticstoolbox Robot object
         q_prev : array-like, previous joint configuration
         q_new : array-like, new joint configuration
 
@@ -40,10 +45,8 @@ def mapToNearest(robot, q_prev, q_new):
     return q_mapped
 
 
-import numpy as np
 
-
-def singularity_gradient(robot, q, body_name):
+def singularity_gradient( q, body_name):
     """
     Compute the gradient of the manipulability measure to avoid singularities.
 
@@ -74,11 +77,63 @@ def singularity_gradient(robot, q, body_name):
 
     return grad
 
+# LOAD STL
+mesh = trimesh.load(matlab+'voxel_alpha.stl')
+print('finish!')
+
+# Setting correct pose of STL
+mesh.vertices *= 0.001
+filepath = matlab+'voxel_alpha.stl'
+T = np.eye(4)
+T[:3,:3] = R.from_rotvec(-np.pi/4 * np.array([1,0,0])).as_matrix()
+T[:3,3] = [0.35, 0.35, -0.55]
+
+mesh.apply_transform(T)
+
+obstacle = Mesh(filename=filepath,
+                pose=T,
+                scale=[0.001,0.001,0.001])
+
+# Connect to GUI
+bc = bullet_client.BulletClient(connection_mode=p.GUI)
+
+# Optional: set search path for meshes
+bc.setAdditionalSearchPath(pybullet_data.getDataPath())
+
+robot=bc.loadURDF(matlab+"imed_robot.urdf")
+position = [0.35, 0.35, -0.55]        # must be length 3
+# Axis-angle
+angle = -np.pi/4              # rotation angle in radians
+axis = np.array([1, 0, 0])    # rotation axis (must be normalized)
+axis = axis / np.linalg.norm(axis)  # just to be safe
+
+# Convert to quaternion
+r = R.from_rotvec(axis * angle)  # axis-angle → rotation vector
+orientation = r.as_quat()
+scale = [1,1,1]  # must be length 3
+# Create collision shape and visual shape
+collisionShapeId = p.createCollisionShape(shapeType=bc.GEOM_MESH,
+                                          fileName='voxel_alpha.stl',
+                                          meshScale=scale)
+visualShapeId = bc.createVisualShape(shapeType=bc.GEOM_MESH,
+                                    fileName='voxel_alpha.stl',
+                                    meshScale=scale)
+
+# Create a multi-body using the mesh
+obstacleId = bc.createMultiBody(baseMass=0,
+                                baseCollisionShapeIndex=collisionShapeId,
+                                baseVisualShapeIndex=visualShapeId,
+                                basePosition=position,
+                                baseOrientation=orientation)
+
+# Let the GUI run
+while True:
+    bc.stepSimulation()
+    time.sleep(1./240.)
 
 # Load URDF of Robot
-matlab = "/Users/kim/Documents/MATLAB/New Folder/path_planning/"
 robot = rtb.Robot.URDF(matlab + "imed_robot.urdf")
-# robot = rtb.Robot.URDF(matlab+ "two_link_robot.urdf")
+
 # Load Path
 path_data = np.loadtxt(matlab + 'path3d.csv', delimiter=",")
 
@@ -92,7 +147,6 @@ endEffector = 'tool'  # name of end-effector link
 
 # Define weights for position (x,y,z) and orientation (roll, pitch, yaw)
 weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
-IK = rtb.IK_LM()
 # Initial joint configuration guess
 q0 = np.zeros(robot.n)  # or your previous configuration
 
@@ -125,8 +179,6 @@ for j in range(waypoints):
     w, x, y, z = path_data[j, 6], path_data[j, 3], path_data[j, 4], path_data[j, 5]
     quaternions.append(R.from_quat([x, y, z, w]))
 
-# Slerp interpolation
-from scipy.spatial.transform import Slerp
 
 slerp = Slerp(tWp, R.concatenate(quaternions))
 qInterp = slerp(tFine)  # Rotation objects for each fine time step
@@ -138,6 +190,7 @@ configTraj = np.zeros((waypoints, len(qStart)))
 velJointTraj = np.zeros((waypoints, len(qStart)))
 T_target = SE3()
 qIK = q0
+a = 0
 # --- Main loop: IK + null-space optimization + smoothing ---
 for i in range(waypoints):
     # Desired end-effector pose
@@ -155,7 +208,10 @@ for i in range(waypoints):
     robot.fkine(qIK)
     J = robot.jacob0(qIK, endEffector)
     N = np.eye(len(qIK)) - np.linalg.pinv(J) @ J
-
+    collision = robot.iscollided(qIK, obstacle)
+    if collision:
+        print('collision!')
+        a+=1
     # damped least Square
     T_current = robot.fkine(qIK)
     dx_pos = T_target.t - T_current.t  # 3x1 vector
@@ -169,22 +225,21 @@ for i in range(waypoints):
     dx[:3] = dx_pos
     dx[3:] = dx_rot
 
-    #lambda_sq = 0.01  # damping factor squared
-    #JJT = J @ J.T
-    #dq = J.T @ np.linalg.inv(JJT + lambda_sq * np.eye(JJT.shape[0])) @ dx
+    lambda_sq = 0.01  # damping factor squared
+    JJT = J @ J.T
+    dq = J.T @ np.linalg.inv(JJT + lambda_sq * np.eye(JJT.shape[0])) @ dx
 
-    #dq_null = 0.1 * (N @ (0.5*dq+ 0.5*singularity_gradient(robot, qIK, endEffector)))
-    dq_null = 0.1 * (N @ singularity_gradient(robot, qIK, endEffector))
+    dq_null = 0.1 * (N @ (0.9*dq+ 0.1*singularity_gradient( qIK, endEffector)))
+    #dq_null = 0.1 * (N @ singularity_gradient(robot, qIK, endEffector))
     qNext = (qIK + dq_null).T
 
     # --- Map to nearest equivalent angles & smooth ---
-    qSmooth = mapToNearest(robot, prevConfig, qNext)
+    qSmooth = mapToNearest(prevConfig, qNext)
     alpha = 0.5
     qFiltered = alpha * qSmooth + (1 - alpha) * prevConfig
     # Store trajectory
     configTraj[i, :] = qFiltered
     prevConfig = qFiltered
-    print(f"{i}:{qFiltered}")
     # Joint velocity
     if i == 0:
         velJointTraj[i, :] = np.zeros(len(qStart))
