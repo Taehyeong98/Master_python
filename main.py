@@ -90,14 +90,24 @@ def validityChecker(state):
     # Extract SE3 state
     s = state  # already SE3 state in Python
     pos = np.array([s.getX(), s.getY(), s.getZ()])
+    INITIAL_RADIUS = 0.3
     GOAL = 0.1
-
     # ------------- 2️⃣ Move robot (sphere) -------------
     tf = fcl.Transform(np.eye(3), pos)
     path_point.setTransform(tf)
 
     inGoalRegion = np.linalg.norm(pos - goalPos) < GOAL_RADIUS
+    InitialRegion = np.linalg.norm(pos - startPos) < INITIAL_RADIUS
+    if np.linalg.norm(pos - goalPos) < GOAL:
+        return True
 
+    if InitialRegion:
+        req = fcl.CollisionRequest()
+        res = fcl.CollisionResult()
+        fcl.collide(path_point, obj, req, res)
+
+        if res.is_collision:
+            return False
     # ------------- 3️⃣ Ground collision (always obstacle) -------------
     if not inGoalRegion:
         req = fcl.CollisionRequest()
@@ -109,13 +119,9 @@ def validityChecker(state):
 
     # ------------- 4️⃣ Patient collision (only inside goal region) -------------
     if inGoalRegion:
-
-        if np.linalg.norm(pos - goalPos) < GOAL:
-            return True
-        else:
-            req = fcl.CollisionRequest()
-            res = fcl.CollisionResult()
-            fcl.collide(path_point, obj, req, res)
+        req = fcl.CollisionRequest()
+        res = fcl.CollisionResult()
+        fcl.collide(path_point, obj, req, res)
 
         if res.is_collision:
             return False
@@ -171,7 +177,7 @@ class GoalRegionSampler(ob.StateSampler):
         pass
 
 def samplerAllocator(space):
-    return GoalRegionSampler(space, goalPos, GOAL_RADIUS, treeReachedGoalRegion)
+    return GoalRegionSampler(space, goalPos, GOAL, treeReachedGoalRegion)
 
 #--------------------#
 #        STL         #
@@ -319,7 +325,14 @@ goalPos = np.array([
     goal().getZ()
 ])
 
+startPos = np.array([
+    start().getX(),
+    start().getY(),
+    start().getZ()
+])
+
 GOAL_RADIUS = 0.3
+GOAL = 0.1
 treeReachedGoalRegion = {"value": False}  # mutable container
 
 space.setStateSamplerAllocator(ob.StateSamplerAllocator(samplerAllocator))
@@ -341,7 +354,7 @@ if solved:
     #       Get solution path
     # -----------------------------
     path = pdef.getSolutionPath()
-    path.interpolate(300)  # densify path
+    path.interpolate(400)  # densify path
 
     # -----------------------------
     #        Save path to CSV
@@ -563,8 +576,6 @@ for waypoints, joint_positions in enumerate(configTraj):
     # --- Self collision ---
     contacts_self_raw = p.getClosestPoints(robotId, robotId, distance=0)
 
-
-
     # Remove trivial contacts (same link pairs)
     contacts_self = []
     unique_pairs = set()
@@ -594,14 +605,8 @@ for waypoints, joint_positions in enumerate(configTraj):
         if pair not in unique_pairs:
             unique_pairs.add(pair)
             print(f"End-effector collides with link {other_link}")
-    if contacts_env or contacts_self:
+
+    if contacts_env:
         print(f"Collision at waypoint {waypoints}")
-
-        if contacts_env:
-            print("  → Environment collision")
-
-        if contacts_self:
-            print("  → Self collision")
-    else:
-        print(f"Waypoint {waypoints} is collision-free")
+        print("  → Environment collision")
     
