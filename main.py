@@ -91,9 +91,6 @@ def validityChecker(state):
     s = state  # already SE3 state in Python
     pos = np.array([s.getX(), s.getY(), s.getZ()])
     GOAL = 0.1
-    if np.linalg.norm(pos - goalPos) < GOAL:
-        treeReachedGoalRegion["value"] = True
-        return True
 
     # ------------- 2️⃣ Move robot (sphere) -------------
     tf = fcl.Transform(np.eye(3), pos)
@@ -112,9 +109,13 @@ def validityChecker(state):
 
     # ------------- 4️⃣ Patient collision (only inside goal region) -------------
     if inGoalRegion:
-        req = fcl.CollisionRequest()
-        res = fcl.CollisionResult()
-        fcl.collide(path_point, obj, req, res)
+
+        if np.linalg.norm(pos - goalPos) < GOAL:
+            return True
+        else:
+            req = fcl.CollisionRequest()
+            res = fcl.CollisionResult()
+            fcl.collide(path_point, obj, req, res)
 
         if res.is_collision:
             return False
