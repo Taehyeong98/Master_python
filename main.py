@@ -287,7 +287,7 @@ bounds.setLow(1, 0.0) # y-axis
 bounds.setHigh(1, 0.85)
 
 bounds.setLow(2, 0.0) # z-axis
-bounds.setHigh(2, 0.84)
+bounds.setHigh(2, 0.62) # original 0.84m
 
 space.setBounds(bounds)
 
@@ -347,7 +347,6 @@ planner = og.RRTstar(si)
 planner.setProblemDefinition(pdef)
 planner.setup()
 
-
 solved = planner.solve(ob.timedPlannerTerminationCondition(20.0))
 
 if solved:
@@ -401,7 +400,7 @@ if solved:
 
 else:
     print("No solution found.")
-"""
+
 #--------------------#
 #      Pybullet      #
 #--------------------#
@@ -497,7 +496,7 @@ configTraj = np.zeros((waypoints, len(qStart)))
 velJointTraj = np.zeros((waypoints, len(qStart)))
 T_target = SE3()
 qIK = q0
-a = 0
+penalty = 0
 # --- Main loop: IK + null-space optimization + smoothing ---
 for i in range(waypoints):
     # Desired end-effector pose
@@ -505,14 +504,14 @@ for i in range(waypoints):
     qk = qInterp[i]
     T_target.R = qk.as_matrix()  # 3x3 rotation matrix
     # Solve IK
-    configNow = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True,method = 'sugihara',k=0.001, q0=qIK)  # replace with your Python IK function
+    configNow = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True,method = 'sugihara',k=0.0001, q0=qIK)  # replace with your Python IK function
     # Handle IK failure
     if not configNow.success:
-       # print(f"Warning: IK failed at waypoint {i}, using previous config")
+        print(f"Warning: IK failed at waypoint {i}, using previous config")
         qIK = prevConfig.copy()
         J = robot.jacob0(qIK, endEffector)
         w = np.sqrt(np.linalg.det(J @ J.T))
-        #print(w)
+        penalty+=1
     else:
         qIK = configNow.q
     robot.fkine(qIK)
@@ -532,12 +531,11 @@ for i in range(waypoints):
     dx[:3] = dx_pos
     dx[3:] = dx_rot
 
-    lambda_sq = 0.01  # damping factor squared
-    JJT = J @ J.T
-    dq = J.T @ np.linalg.inv(JJT + lambda_sq * np.eye(JJT.shape[0])) @ dx
+    #lambda_sq = 0.01  # damping factor squared
+    #JJT = J @ J.T
+    #dq = J.T @ np.linalg.inv(JJT + lambda_sq * np.eye(JJT.shape[0])) @ dx
 
-    dq_null = 0.1 * (N @ (dq+singularity_gradient( qIK, endEffector)))
-    #dq_null = 0.1 * (N @ singularity_gradient(robot, qIK, endEffector))
+    dq_null = 0.1 * (N @ (singularity_gradient( qIK, endEffector)))
     qNext = (qIK + dq_null).T
 
     # --- Map to nearest equivalent angles & smooth ---
@@ -563,6 +561,188 @@ absDeltaJointDeg = np.abs(deltaJointDeg)
 allConfigTraj = np.hstack((configTraj, velJointTraj))
 np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
 
+while penalty > 0:
+    print("replanning...")
+    # Create planner
+    planner = og.RRTstar(si)
+    planner.setProblemDefinition(pdef)
+    planner.setup()
+
+    solved = planner.solve(ob.timedPlannerTerminationCondition(20.0))
+
+    if solved:
+
+        # -----------------------------
+        #       Get solution path
+        # -----------------------------
+        path = pdef.getSolutionPath()
+        path.interpolate(300)  # densify path
+
+        # -----------------------------
+        #        Save path to CSV
+        # -----------------------------
+        path_csv = matlab + "path3d.csv"
+        with open(path_csv, "w", newline="") as f:
+            writer = csv.writer(f)
+            for i in range(path.getStateCount()):
+                s = path.getState(i)
+                writer.writerow([
+                    s.getX(),
+                    s.getY(),
+                    s.getZ(),
+                    s.rotation().x,
+                    s.rotation().y,
+                    s.rotation().z,
+                    s.rotation().w
+                ])
+        print(f"Solution path saved to {path_csv}")
+
+        # -----------------------------
+        #     Save explored points
+        # -----------------------------
+        pdata = ob.PlannerData(si)
+        planner.getPlannerData(pdata)
+
+        explored_csv = matlab + "explored_points.csv"
+        with open(explored_csv, "w", newline="") as f:
+            writer = csv.writer(f)
+            for i in range(pdata.numVertices()):
+                v = pdata.getVertex(i).getState()
+                writer.writerow([
+                    v.getX(),
+                    v.getY(),
+                    v.getZ(),
+                    v.rotation().x,
+                    v.rotation().y,
+                    v.rotation().z,
+                    v.rotation().w
+                ])
+        print(f"Explored points saved to {explored_csv}")
+
+    else:
+        print("No solution found.")
+
+    # Load Path
+    path_data = np.loadtxt(matlab + 'path3d.csv', delimiter=",")
+
+    # Number of waypoints (rows)
+    waypoints = path_data.shape[0]
+
+    print("Path data:\n", path_data)
+    print(waypoints)
+
+    endEffector = 'tool'  # name of end-effector link
+
+    # Define weights for position (x,y,z) and orientation (roll, pitch, yaw)
+    weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
+    # Initial joint configuration guess
+    q0 = np.zeros(robot.n)  # or your previous configuration
+
+    # --- Parameters ---
+    T = 1.0  # total trajectory time
+    waypoints = path_data.shape[0]  # number of waypoints
+    tWp = np.linspace(0, T, waypoints)  # time for each waypoint
+    allConfigTraj = []
+
+    # --- Extract XYZ positions ---
+    posX = path_data[:, 0]
+    posY = path_data[:, 1]
+    posZ = path_data[:, 2]
+
+    # --- Cubic spline for position (clamped: zero velocity at start/end) ---
+    # 'bc_type' = 'clamped' ensures zero velocity at endpoints
+    splineX = CubicSpline(tWp, posX, bc_type='clamped')
+    splineY = CubicSpline(tWp, posY, bc_type='clamped')
+    splineZ = CubicSpline(tWp, posZ, bc_type='clamped')
+
+    tFine = np.linspace(0, T, waypoints)  # interpolated time
+    posTraj = np.column_stack((splineX(tFine), splineY(tFine), splineZ(tFine)))
+
+    # --- Quaternion interpolation ---
+    # MATLAB: quaternion(w,x,y,z)
+    # Python: scipy Rotation.from_quat expects (x, y, z, w)
+    quaternions = []
+    for j in range(waypoints):
+        # Convert MATLAB [w,x,y,z] to Python [x,y,z,w]
+        w, x, y, z = path_data[j, 6], path_data[j, 3], path_data[j, 4], path_data[j, 5]
+        quaternions.append(R.from_quat([x, y, z, w]))
+
+    slerp = Slerp(tWp, R.concatenate(quaternions))
+    qInterp = slerp(tFine)  # Rotation objects for each fine time step
+
+    # --- Initialize configuration ---
+    qStart = q0  # Python list or numpy array
+    prevConfig = np.array(qStart)
+    configTraj = np.zeros((waypoints, len(qStart)))
+    velJointTraj = np.zeros((waypoints, len(qStart)))
+    T_target = SE3()
+    qIK = q0
+    penalty = 0
+    # --- Main loop: IK + null-space optimization + smoothing ---
+    for i in range(waypoints):
+        # Desired end-effector pose
+        T_target.t = posTraj[i, :]
+        qk = qInterp[i]
+        T_target.R = qk.as_matrix()  # 3x3 rotation matrix
+        # Solve IK
+        configNow = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
+                                   q0=qIK)  # replace with your Python IK function
+        # Handle IK failure
+        if not configNow.success:
+            print(f"Warning: IK failed at waypoint {i}, using previous config")
+            qIK = prevConfig.copy()
+            J = robot.jacob0(qIK, endEffector)
+            w = np.sqrt(np.linalg.det(J @ J.T))
+            penalty = +1
+        else:
+            qIK = configNow.q
+        robot.fkine(qIK)
+        J = robot.jacob0(qIK, endEffector)
+        N = np.eye(len(qIK)) - np.linalg.pinv(J) @ J
+
+        # damped least Square
+        T_current = robot.fkine(qIK)
+        dx_pos = T_target.t - T_current.t  # 3x1 vector
+        R_current = T_current.R  # 3x3
+        R_target = T_target.R  # 3x3
+
+        # rotation matrix error
+        dx_rot = R.from_matrix(R_target @ R_current.T).as_rotvec()
+
+        dx = np.zeros(6)
+        dx[:3] = dx_pos
+        dx[3:] = dx_rot
+
+        lambda_sq = 0.01  # damping factor squared
+        JJT = J @ J.T
+        dq = J.T @ np.linalg.inv(JJT + lambda_sq * np.eye(JJT.shape[0])) @ dx
+
+        dq_null = 0.1 * (N @ (dq + singularity_gradient(qIK, endEffector)))
+        qNext = (qIK + dq_null).T
+
+        # --- Map to nearest equivalent angles & smooth ---
+        qSmooth = mapToNearest(prevConfig, qNext)
+        alpha = 0.5
+        qFiltered = alpha * qSmooth + (1 - alpha) * prevConfig
+        # Store trajectory
+        configTraj[i, :] = qFiltered
+        prevConfig = qFiltered
+        # Joint velocity
+        if i == 0:
+            velJointTraj[i, :] = np.zeros(len(qStart))
+        else:
+            dt = tFine[i] - tFine[i - 1]
+            velJointTraj[i, :] = (configTraj[i, :] - configTraj[i - 1, :]) / dt
+
+    # --- Compute delta in degrees if needed ---
+    deltaJointRad = np.diff(configTraj, axis=0)
+    deltaJointDeg = np.rad2deg(deltaJointRad)
+    absDeltaJointDeg = np.abs(deltaJointDeg)
+
+    # --- Final smooth trajectory ---
+    allConfigTraj = np.hstack((configTraj, velJointTraj))
+    np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
+
 #--------------------#
 #  COLLISION CHECK   #
 #--------------------#
@@ -570,7 +750,7 @@ np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f
 # Get joint indices
 num_joints = p.getNumJoints(robotId)
 joint_indices = list(range(num_joints))
-
+collision_penalty = 0
 for waypoints, joint_positions in enumerate(configTraj):
     # Set joint positions (robot, joint(i), theta)
     for joint_index, joint_value in zip(joint_indices, joint_positions):
@@ -611,9 +791,137 @@ for waypoints, joint_positions in enumerate(configTraj):
         if pair not in unique_pairs:
             unique_pairs.add(pair)
             print(f"End-effector collides with link {other_link}")
-
+            if other_link == 3 | other_link == 4:
+                collision_penalty +=1
     if contacts_env:
         print(f"Collision at waypoint {waypoints}")
         print("  → Environment collision")
-    
-"""
+attempt_collision = 0
+while collision_penalty > 0 and attempt_collision < 5:
+    print("Collision penalty:", collision_penalty)
+    print("retry IK SOLVER")
+    print("attempt :", attempt_collision)
+    # --- Main loop: IK + null-space optimization + smoothing ---
+    for i in range(waypoints):
+        # Desired end-effector pose
+        T_target.t = posTraj[i, :]
+        qk = qInterp[i]
+        T_target.R = qk.as_matrix()  # 3x3 rotation matrix
+        # Solve IK
+        configNow = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
+                                   q0=qIK)  # replace with your Python IK function
+        # Handle IK failure
+        if not configNow.success:
+            print(f"Warning: IK failed at waypoint {i}, using previous config")
+            qIK = prevConfig.copy()
+            J = robot.jacob0(qIK, endEffector)
+            w = np.sqrt(np.linalg.det(J @ J.T))
+            penalty += 1
+        else:
+            qIK = configNow.q
+        robot.fkine(qIK)
+        J = robot.jacob0(qIK, endEffector)
+        N = np.eye(len(qIK)) - np.linalg.pinv(J) @ J
+
+        # damped least Square
+        T_current = robot.fkine(qIK)
+        dx_pos = T_target.t - T_current.t  # 3x1 vector
+        R_current = T_current.R  # 3x3
+        R_target = T_target.R  # 3x3
+
+        # rotation matrix error
+        dx_rot = R.from_matrix(R_target @ R_current.T).as_rotvec()
+
+        dx = np.zeros(6)
+        dx[:3] = dx_pos
+        dx[3:] = dx_rot
+
+        lambda_sq = 0.01  # damping factor squared
+        JJT = J @ J.T
+        dq = J.T @ np.linalg.inv(JJT + lambda_sq * np.eye(JJT.shape[0])) @ dx
+
+        dq_null = 0.1 * (N @ (dq + singularity_gradient(qIK, endEffector)))
+        qNext = (qIK + dq_null).T
+
+        # --- Map to nearest equivalent angles & smooth ---
+        qSmooth = mapToNearest(prevConfig, qNext)
+        alpha = 0.5
+        qFiltered = alpha * qSmooth + (1 - alpha) * prevConfig
+        # Store trajectory
+        configTraj[i, :] = qFiltered
+        prevConfig = qFiltered
+        # Joint velocity
+        if i == 0:
+            velJointTraj[i, :] = np.zeros(len(qStart))
+        else:
+            dt = tFine[i] - tFine[i - 1]
+            velJointTraj[i, :] = (configTraj[i, :] - configTraj[i - 1, :]) / dt
+
+    # --- Compute delta in degrees if needed ---
+    deltaJointRad = np.diff(configTraj, axis=0)
+    deltaJointDeg = np.rad2deg(deltaJointRad)
+    absDeltaJointDeg = np.abs(deltaJointDeg)
+
+    # --- Final smooth trajectory ---
+    allConfigTraj = np.hstack((configTraj, velJointTraj))
+    np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
+
+    # --------------------#
+    #  COLLISION CHECK   #
+    # --------------------#
+
+    # Get joint indices
+    num_joints = p.getNumJoints(robotId)
+    joint_indices = list(range(num_joints))
+    collision_penalty = 0
+    for waypoints, joint_positions in enumerate(configTraj):
+        # Set joint positions (robot, joint(i), theta)
+        for joint_index, joint_value in zip(joint_indices, joint_positions):
+            p.resetJointState(robotId, joint_index, joint_value)
+
+        # --- Environment collision ---
+        contacts_env = p.getClosestPoints(robotId, obstacleId, distance=0)
+
+        # --- Self collision ---
+        contacts_self_raw = p.getClosestPoints(robotId, robotId, distance=0)
+
+        # Remove trivial contacts (same link pairs)
+        contacts_self = []
+        unique_pairs = set()
+        ee_link = 7
+        for c in contacts_self_raw:
+            linkA = c[3]
+            linkB = c[4]
+
+            # Only care if EE is involved
+            if ee_link not in (linkA, linkB):
+                continue
+
+            # Identify the "other" link
+            other_link = linkB if linkA == ee_link else linkA
+
+            # Ignore same link
+            if other_link == ee_link:
+                continue
+
+            # Ignore parent-child contact
+            parent = p.getJointInfo(robotId, ee_link)[16]
+            if other_link == parent:
+                continue
+
+            pair = tuple(sorted((ee_link, other_link)))
+
+            if pair not in unique_pairs:
+                unique_pairs.add(pair)
+                print(f"End-effector collides with link {other_link}")
+                if other_link == 3 | other_link == 4:
+                    collision_penalty += 1
+        if contacts_env:
+            print(f"Collision at waypoint {waypoints}")
+            print("  → Environment collision")
+            collision_penalty += 1
+
+    attempt_collision+=1
+
+if attempt_collision ==5:
+    print ("choose the other goal pose")
