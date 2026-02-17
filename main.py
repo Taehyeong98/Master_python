@@ -347,70 +347,9 @@ planner = og.RRTstar(si)
 planner.setProblemDefinition(pdef)
 planner.setup()
 
-# Solve (10 seconds timeout)
-solved = planner.solve(ob.timedPlannerTerminationCondition(10.0))
 
+solved = planner.solve(ob.timedPlannerTerminationCondition(20.0))
 
-buffer = io.StringIO()
-sys.stdout = buffer
-
-goal_region = pdef.getGoal()  # this is a Goal object
-path = pdef.getSolutionPath()
-
-sys.stdout = sys.__stdout__  # restore stdout
-
-output = buffer.getvalue()
-max_attempts = 5
-attempt = 0
-while "approximate" in output and attempt < max_attempts:
-
-    # Prepare for next attempt
-    planner.clear()
-    pdef.clearSolutionPaths()
-    planner.setProblemDefinition(pdef)
-    planner.setup()
-
-    buffer = io.StringIO()
-    sys.stdout = buffer
-
-    goal_region = pdef.getGoal()  # this is a Goal object
-    path = pdef.getSolutionPath()
-
-    sys.stdout = sys.__stdout__  # restore stdout
-
-    output = buffer.getvalue()
-    attempt += 1
-
-solved = planner.solve(ob.timedPlannerTerminationCondition(10.0))
-
-"""
-while pef.hasApproximateSolution() and attempt < max_attempts:
-    solved = planner.solve(ob.timedPlannerTerminationCondition(10.0))
-
-    if solved and pdef.hasSolution():
-        path = pdef.getSolutionPath()
-        solution_states = path.getStates()
-        exact_goal_in_path = any(goal_region.isSatisfied(s) for s in solution_states)
-
-        if exact_goal_in_path:
-            print("Exact solution found!")
-            break
-        else:
-            print("Approximate solution: no node inside goal region")
-    else:
-        print("No solution found in this attempt")
-
-    # Prepare for next attempt
-    planner.clear()
-    pdef.clearSolutionPaths()
-    planner.setProblemDefinition(pdef)
-    planner.setup()
-    attempt += 1
-
-if not exact_goal_in_path:
-    print("Failed to find exact goal node after", max_attempts, "attempts")
-
-"""
 if solved:
 
     # -----------------------------
