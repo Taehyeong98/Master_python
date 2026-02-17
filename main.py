@@ -17,6 +17,8 @@ from ompl import geometric as og
 import math
 import csv
 import random
+import io
+import sys
 
 # FCL
 import fcl
@@ -348,13 +350,74 @@ planner.setup()
 # Solve (10 seconds timeout)
 solved = planner.solve(ob.timedPlannerTerminationCondition(10.0))
 
+
+buffer = io.StringIO()
+sys.stdout = buffer
+
+goal_region = pdef.getGoal()  # this is a Goal object
+path = pdef.getSolutionPath()
+
+sys.stdout = sys.__stdout__  # restore stdout
+
+output = buffer.getvalue()
+max_attempts = 5
+attempt = 0
+while "approximate" in output and attempt < max_attempts:
+
+    # Prepare for next attempt
+    planner.clear()
+    pdef.clearSolutionPaths()
+    planner.setProblemDefinition(pdef)
+    planner.setup()
+
+    buffer = io.StringIO()
+    sys.stdout = buffer
+
+    goal_region = pdef.getGoal()  # this is a Goal object
+    path = pdef.getSolutionPath()
+
+    sys.stdout = sys.__stdout__  # restore stdout
+
+    output = buffer.getvalue()
+    attempt += 1
+
+solved = planner.solve(ob.timedPlannerTerminationCondition(10.0))
+
+"""
+while pef.hasApproximateSolution() and attempt < max_attempts:
+    solved = planner.solve(ob.timedPlannerTerminationCondition(10.0))
+
+    if solved and pdef.hasSolution():
+        path = pdef.getSolutionPath()
+        solution_states = path.getStates()
+        exact_goal_in_path = any(goal_region.isSatisfied(s) for s in solution_states)
+
+        if exact_goal_in_path:
+            print("Exact solution found!")
+            break
+        else:
+            print("Approximate solution: no node inside goal region")
+    else:
+        print("No solution found in this attempt")
+
+    # Prepare for next attempt
+    planner.clear()
+    pdef.clearSolutionPaths()
+    planner.setProblemDefinition(pdef)
+    planner.setup()
+    attempt += 1
+
+if not exact_goal_in_path:
+    print("Failed to find exact goal node after", max_attempts, "attempts")
+
+"""
 if solved:
 
     # -----------------------------
     #       Get solution path
     # -----------------------------
     path = pdef.getSolutionPath()
-    path.interpolate(400)  # densify path
+    path.interpolate(300)  # densify path
 
     # -----------------------------
     #        Save path to CSV
@@ -399,6 +462,7 @@ if solved:
 
 else:
     print("No solution found.")
+"""
 #--------------------#
 #      Pybullet      #
 #--------------------#
@@ -502,11 +566,14 @@ for i in range(waypoints):
     qk = qInterp[i]
     T_target.R = qk.as_matrix()  # 3x3 rotation matrix
     # Solve IK
-    configNow = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True,method = 'sugihara',k=0.0001, q0=qIK)  # replace with your Python IK function
+    configNow = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True,method = 'sugihara',k=0.001, q0=qIK)  # replace with your Python IK function
     # Handle IK failure
     if not configNow.success:
-        # print(f"Warning: IK failed at waypoint {i}, using previous config")
+       # print(f"Warning: IK failed at waypoint {i}, using previous config")
         qIK = prevConfig.copy()
+        J = robot.jacob0(qIK, endEffector)
+        w = np.sqrt(np.linalg.det(J @ J.T))
+        #print(w)
     else:
         qIK = configNow.q
     robot.fkine(qIK)
@@ -530,7 +597,7 @@ for i in range(waypoints):
     JJT = J @ J.T
     dq = J.T @ np.linalg.inv(JJT + lambda_sq * np.eye(JJT.shape[0])) @ dx
 
-    dq_null = 0.1 * (N @ (0.9*dq+ 0.1*singularity_gradient( qIK, endEffector)))
+    dq_null = 0.1 * (N @ (dq+singularity_gradient( qIK, endEffector)))
     #dq_null = 0.1 * (N @ singularity_gradient(robot, qIK, endEffector))
     qNext = (qIK + dq_null).T
 
@@ -610,3 +677,4 @@ for waypoints, joint_positions in enumerate(configTraj):
         print(f"Collision at waypoint {waypoints}")
         print("  → Environment collision")
     
+"""
