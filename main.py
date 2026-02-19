@@ -107,7 +107,10 @@ def validityChecker(state):
         req = fcl.CollisionRequest()
         res = fcl.CollisionResult()
         fcl.collide(path_point, obj, req, res)
-
+        fcl.collide(path_point, s1_obj, req, res)
+        fcl.collide(path_point, s2_obj, req, res)
+        fcl.collide(path_point, s3_obj, req, res)
+        fcl.collide(path_point, s4_obj, req, res)
         if res.is_collision:
             return False
     # ------------- 3️⃣ Ground collision (always obstacle) -------------
@@ -115,6 +118,10 @@ def validityChecker(state):
         req = fcl.CollisionRequest()
         res = fcl.CollisionResult()
         fcl.collide(path_point, groundBlock, req, res)
+        fcl.collide(path_point, s1_obj, req, res)
+        fcl.collide(path_point, s2_obj, req, res)
+        fcl.collide(path_point, s3_obj, req, res)
+        fcl.collide(path_point, s4_obj, req, res)
 
         if res.is_collision:
             return False
@@ -124,6 +131,10 @@ def validityChecker(state):
         req = fcl.CollisionRequest()
         res = fcl.CollisionResult()
         fcl.collide(path_point, obj, req, res)
+        fcl.collide(path_point, s1_obj, req, res)
+        fcl.collide(path_point, s2_obj, req, res)
+        fcl.collide(path_point, s3_obj, req, res)
+        fcl.collide(path_point, s4_obj, req, res)
 
         if res.is_collision:
             return False
@@ -252,6 +263,38 @@ print("The width is", blockWidth)
 # margin = 0.05
 # blockLength += margin
 # blockWidth  += margin
+
+#--------------------#
+#    Singularity     #
+#--------------------#
+Radius = 0.02
+s1 = fcl.Sphere(Radius)
+s1_obj = fcl.CollisionObject(s1)
+s1_rot = np.eye(3)
+s1_trans = np.array([1.56, 0.47, 0.6])
+s1_tf = fcl.Transform(s1_rot, s1_trans)
+s1_obj.setTransform(s1_tf)
+
+s2 = fcl.Sphere(Radius)
+s2_obj = fcl.CollisionObject(s2)
+s2_rot = np.eye(3)
+s2_trans = np.array([1.63, 0.68, 0.53])
+s2_tf = fcl.Transform(s2_rot, s2_trans)
+s2_obj.setTransform(s2_tf)
+
+s3 = fcl.Sphere(Radius)
+s3_obj = fcl.CollisionObject(s3)
+s3_rot = np.eye(3)
+s3_trans = np.array([0.43, 0.22, 0.53])
+s3_tf = fcl.Transform(s3_rot, s3_trans)
+s3_obj.setTransform(s3_tf)
+
+s4 = fcl.Sphere(Radius)
+s4_obj = fcl.CollisionObject(s4)
+s4_rot = np.eye(3)
+s4_trans = np.array([0.6, 0.14, 0.55])
+s4_tf = fcl.Transform(s4_rot, s4_trans)
+s4_obj.setTransform(s4_tf)
 
 # Create FCL Box
 groundBlockShape = fcl.Box(blockLength, blockWidth, blockHeight)
@@ -561,7 +604,7 @@ absDeltaJointDeg = np.abs(deltaJointDeg)
 allConfigTraj = np.hstack((configTraj, velJointTraj))
 np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
 
-while penalty > 0:
+while penalty > 10:
     print("replanning...")
     # Create planner
     planner = og.RRTstar(si)
