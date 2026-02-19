@@ -121,17 +121,27 @@ endEffector = 'tool'  # name of end-effector link
 weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
 
 # --- Initialize configuration ---
-start_pose_deg = [0.1,-90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
+#start_pose_deg = [0.1,-90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
+start_pose_deg = [0.1,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
+
+
+
 q_start_prismatic = start_pose_deg[0]
 q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2–7) to radians
 start_pose_rad = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
 
 # park pose
-park_pose_deg = [1.4,-90.0, 90.0, -90.0, 0.0, -90.0, 0.0] # +90° in joint (2) better!
+park_pose_deg = [1.4, 90.0, 90.0, -90.0, 0.0, -90.0, 0.0] # +90° in joint (2) better!
 q_park_prismatic = park_pose_deg[0]
 q_park_revolute = np.radians(park_pose_deg[1:7])
 park_pose_rad = np.concatenate(([q_park_prismatic], q_park_revolute))
 
+FK = robot.fkine(park_pose_rad)
+print("FK: ", FK)
+start_pos = FK.t
+start_r = R.from_matrix(FK.R)
+start_q = start_r.as_quat()   # returns [x, y, z, w]
+print("q: ", start_q) # [x,y,z,w]
 #--------------------#
 #  Linear Movement   #
 #--------------------#
@@ -236,8 +246,12 @@ si = ob.SpaceInformation(space)
 start = ob.State(space)
 goal = ob.State(space)
 
-start().setXYZ(1.51,0.245,0.4967)
-start().rotation().setIdentity()
+start().setXYZ(start_pos[0],start_pos[1],start_pos[2])
+start().rotation().x = start_q[0]
+start().rotation().y = start_q[1]
+start().rotation().z = start_q[2]
+start().rotation().w = start_q[3]
+
 goal().setXYZ(1.623, 0.577, 0.322)
 
 # Equivalent of:
@@ -498,6 +512,4 @@ absDeltaJointDeg = np.abs(deltaJointDeg)
 #allConfigTraj = np.hstack((configTraj, velJointTraj))
 allConfigTraj = np.concatenate((linear_movement,configTraj))
 np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
-
-
 
