@@ -229,6 +229,12 @@ q_current = allConfigTraj[7*(goal_time_joint-1),:]
 
 trajectory  = np.concatenate((linear_movement,allConfigTraj))
 np.savetxt(matlab + "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
+#---------------------#
+# SAVE FOR EXPERIMENT #
+#---------------------#
+trajectory[:,0] = trajectory[:,0]*1000
+trajectory[:,1:7] = trajectory[:,1:7]*180/np.pi
+np.savetxt(matlab + "modular_normal.txt", allConfigTraj, delimiter=" ", fmt="%.2f")
 
 
 
