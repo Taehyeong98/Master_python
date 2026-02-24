@@ -107,6 +107,7 @@ def validityChecker(state):
         req = fcl.CollisionRequest()
         res = fcl.CollisionResult()
         fcl.collide(path_point, obj, req, res)
+        fcl.collide(path_point, s1_obj, req, res)
 
         if res.is_collision:
             return False
@@ -122,7 +123,7 @@ weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
 
 # --- Initialize configuration ---
 #start_pose_deg = [0.1,-90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
-start_pose_deg = [0.1,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
+start_pose_deg = [0.2,-90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
 
 
 
@@ -136,25 +137,19 @@ q_park_prismatic = park_pose_deg[0]
 q_park_revolute = np.radians(park_pose_deg[1:7])
 park_pose_rad = np.concatenate(([q_park_prismatic], q_park_revolute))
 
-FK = robot.fkine(park_pose_rad)
-print("FK: ", FK)
-start_pos = FK.t
-start_r = R.from_matrix(FK.R)
-start_q = start_r.as_quat()   # returns [x, y, z, w]
-print("q: ", start_q) # [x,y,z,w]
 #--------------------#
 #  Linear Movement   #
 #--------------------#
 allConfigTraj =[]
-linear_time = 30
+linear_time = 1000
 linear_movement = np.zeros((linear_time,len(start_pose_rad)))
 linear_movement[0:] = start_pose_rad
 x_start = start_pose_rad[0]
 x_goal = park_pose_rad[0]
 
 linear_distance = x_goal - x_start
-
-
+velocity_zero = np.zeros(len(start_pose_rad))
+velocity_linear = np.zeros((linear_time,len(start_pose_rad)))
 step = linear_distance / linear_time
 for i in range(linear_time):
     # Prismatic joint moves linearly
@@ -167,7 +162,53 @@ for i in range(linear_time):
     ))
 
     linear_movement[i] = q_current
+    x_dot_current = step;
+    q_dot_current = np.concatenate((
+        [x_dot_current],
+        velocity_zero[1:]
+    ))
+    velocity_linear[i] =  q_dot_current
 
+#linear_move = np.hstack((linear_movement, velocity_linear ))
+linear_move = linear_movement
+
+#---------------------#
+# SAVE FOR EXPERIMENT #
+#---------------------#
+allConfigTraj = linear_move
+allConfigTraj[:,0] = allConfigTraj[:,0]*1000
+allConfigTraj[:,1:7] = allConfigTraj[:,1:7]*180/np.pi
+np.savetxt(matlab + "allConfigTraj.txt", allConfigTraj, delimiter=" ", fmt="%.2f")
+
+"""
+#--------------------#
+#   Searching Pose   #
+#--------------------#
+search_steps= 30
+n_joints = len(start_pose_rad)
+search_trajectory = np.zeros((search_steps,n_joints))
+search_start = linear_movement[linear_time-1,:]
+search_rad = -45 * math.pi / 180
+search_step_rad = search_rad/search_steps
+velocity_search = np.zeros((search_steps,n_joints))
+for i in range(search_steps):
+    q_current = search_start.copy()
+    q_current[3] = q_current[3]+search_step_rad *(i+1)
+
+    search_trajectory[i,:] = q_current
+
+    q_dot_current = velocity_zero.copy()
+    q_dot_current[3] = search_step_rad
+    velocity_search[i] = q_dot_current
+
+search_move = np.hstack((search_trajectory,velocity_search))
+search_pose_rad = search_trajectory[search_steps-1,:]
+FK = robot.fkine(search_pose_rad)
+print("FK: ", FK)
+start_pos = FK.t
+start_r = R.from_matrix(FK.R)
+start_q = start_r.as_quat()   # returns [x, y, z, w]
+print("q: ", start_q) # [x,y,z,w]
 #--------------------#
 #    GOAL REGION     #
 #--------------------#
@@ -218,10 +259,21 @@ tf_mesh = fcl.Transform(Rot, translation)
 # Apply to collision object
 obj.setTransform(tf_mesh)
 
+
+#--------------------#
+#    Singularity     #
+#--------------------#
+Radius = 0.02
+s1 = fcl.Sphere(Radius)
+s1_obj = fcl.CollisionObject(s1)
+s1_rot = np.eye(3)
+s1_trans = np.array([1.527, 0.264, 0.467])
+s1_tf = fcl.Transform(s1_rot, s1_trans)
+s1_obj.setTransform(s1_tf)
 #--------------------#
 #    Path Planner    #
 #--------------------#
-point_r = 0.1
+point_r = 0.05
 point_shape = fcl.Sphere(point_r)
 path_point = fcl.CollisionObject(point_shape)
 
@@ -252,7 +304,7 @@ start().rotation().y = start_q[1]
 start().rotation().z = start_q[2]
 start().rotation().w = start_q[3]
 
-goal().setXYZ(1.623, 0.577, 0.322)
+goal().setXYZ(1.799, 0.342, 0.35)
 
 # Equivalent of:
 # qx = AngleAxis(pi, X)
@@ -264,11 +316,11 @@ qy = R.from_rotvec((np.pi/4) * np.array([0, 1, 0]))
 
 q = (qy * qx).as_quat()  # returns [x,y,z,w]
 
+
 goal().rotation().x = q[0]
 goal().rotation().y = q[1]
 goal().rotation().z = q[2]
 goal().rotation().w = q[3]
-
 # Problem definition
 pdef = ob.ProblemDefinition(si)
 pdef.setStartAndGoalStates(start, goal)
@@ -299,7 +351,7 @@ planner = og.RRTstar(si)
 planner.setProblemDefinition(pdef)
 planner.setup()
 
-solved = planner.solve(ob.timedPlannerTerminationCondition(20.0))
+solved = planner.solve(ob.timedPlannerTerminationCondition(30.0))
 
 if solved:
 
@@ -446,7 +498,7 @@ prevConfig = np.array(qStart)
 configTraj = np.zeros((waypoints, len(qStart)))
 velJointTraj = np.zeros((waypoints, len(qStart)))
 T_target = SE3()
-qIK = park_pose_rad
+qIK = search_pose_rad
 penalty = 0
 # --- Main loop: IK + null-space optimization + smoothing ---
 for i in range(waypoints):
@@ -509,7 +561,190 @@ deltaJointDeg = np.rad2deg(deltaJointRad)
 absDeltaJointDeg = np.abs(deltaJointDeg)
 
 # --- Final smooth trajectory ---
-#allConfigTraj = np.hstack((configTraj, velJointTraj))
-allConfigTraj = np.concatenate((linear_movement,configTraj))
+goal_move = np.hstack((configTraj, velJointTraj))
+allConfigTraj = np.concatenate((linear_move,search_move,goal_move))
 np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
 
+while penalty > 10:
+    print("replanning...")
+    # Create planner
+    planner = og.RRTstar(si)
+    planner.setProblemDefinition(pdef)
+    planner.setup()
+
+    solved = planner.solve(ob.timedPlannerTerminationCondition(20.0))
+
+    if solved:
+
+        # -----------------------------
+        #       Get solution path
+        # -----------------------------
+        path = pdef.getSolutionPath()
+        path.interpolate(300)  # densify path
+
+        # -----------------------------
+        #        Save path to CSV
+        # -----------------------------
+        path_csv = matlab + "path3d.csv"
+        with open(path_csv, "w", newline="") as f:
+            writer = csv.writer(f)
+            for i in range(path.getStateCount()):
+                s = path.getState(i)
+                writer.writerow([
+                    s.getX(),
+                    s.getY(),
+                    s.getZ(),
+                    s.rotation().x,
+                    s.rotation().y,
+                    s.rotation().z,
+                    s.rotation().w
+                ])
+        print(f"Solution path saved to {path_csv}")
+
+        # -----------------------------
+        #     Save explored points
+        # -----------------------------
+        pdata = ob.PlannerData(si)
+        planner.getPlannerData(pdata)
+
+        explored_csv = matlab + "explored_points.csv"
+        with open(explored_csv, "w", newline="") as f:
+            writer = csv.writer(f)
+            for i in range(pdata.numVertices()):
+                v = pdata.getVertex(i).getState()
+                writer.writerow([
+                    v.getX(),
+                    v.getY(),
+                    v.getZ(),
+                    v.rotation().x,
+                    v.rotation().y,
+                    v.rotation().z,
+                    v.rotation().w
+                ])
+        print(f"Explored points saved to {explored_csv}")
+
+    else:
+        print("No solution found.")
+
+    # Load Path
+    path_data = np.loadtxt(matlab + 'path3d.csv', delimiter=",")
+
+    # Number of waypoints (rows)
+    waypoints = path_data.shape[0]
+
+    print("Path data:\n", path_data)
+    print(waypoints)
+
+    endEffector = 'tool'  # name of end-effector link
+
+    # Define weights for position (x,y,z) and orientation (roll, pitch, yaw)
+    weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
+    # Initial joint configuration guess
+    q0 = np.zeros(robot.n)  # or your previous configuration
+
+    # --- Parameters ---
+    T = 1.0  # total trajectory time
+    waypoints = path_data.shape[0]  # number of waypoints
+    tWp = np.linspace(0, T, waypoints)  # time for each waypoint
+    allConfigTraj = []
+
+    # --- Extract XYZ positions ---
+    posX = path_data[:, 0]
+    posY = path_data[:, 1]
+    posZ = path_data[:, 2]
+
+    # --- Cubic spline for position (clamped: zero velocity at start/end) ---
+    # 'bc_type' = 'clamped' ensures zero velocity at endpoints
+    splineX = CubicSpline(tWp, posX, bc_type='clamped')
+    splineY = CubicSpline(tWp, posY, bc_type='clamped')
+    splineZ = CubicSpline(tWp, posZ, bc_type='clamped')
+
+    tFine = np.linspace(0, T, waypoints)  # interpolated time
+    posTraj = np.column_stack((splineX(tFine), splineY(tFine), splineZ(tFine)))
+
+    # --- Quaternion interpolation ---
+    # MATLAB: quaternion(w,x,y,z)
+    # Python: scipy Rotation.from_quat expects (x, y, z, w)
+    quaternions = []
+    for j in range(waypoints):
+        # Convert MATLAB [w,x,y,z] to Python [x,y,z,w]
+        w, x, y, z = path_data[j, 6], path_data[j, 3], path_data[j, 4], path_data[j, 5]
+        quaternions.append(R.from_quat([x, y, z, w]))
+
+    slerp = Slerp(tWp, R.concatenate(quaternions))
+    qInterp = slerp(tFine)  # Rotation objects for each fine time step
+
+    # --- Initialize configuration ---
+    qStart = q0  # Python list or numpy array
+    prevConfig = np.array(qStart)
+    configTraj = np.zeros((waypoints, len(qStart)))
+    velJointTraj = np.zeros((waypoints, len(qStart)))
+    T_target = SE3()
+    qIK = q0
+    penalty = 0
+    # --- Main loop: IK + null-space optimization + smoothing ---
+    for i in range(waypoints):
+        # Desired end-effector pose
+        T_target.t = posTraj[i, :]
+        qk = qInterp[i]
+        T_target.R = qk.as_matrix()  # 3x3 rotation matrix
+        # Solve IK
+        configNow = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
+                                   q0=qIK)  # replace with your Python IK function
+        # Handle IK failure
+        if not configNow.success:
+            print(f"Warning: IK failed at waypoint {i}, using previous config")
+            qIK = prevConfig.copy()
+            J = robot.jacob0(qIK, endEffector)
+            w = np.sqrt(np.linalg.det(J @ J.T))
+            penalty = +1
+        else:
+            qIK = configNow.q
+        robot.fkine(qIK)
+        J = robot.jacob0(qIK, endEffector)
+        N = np.eye(len(qIK)) - np.linalg.pinv(J) @ J
+
+        # damped least Square
+        T_current = robot.fkine(qIK)
+        dx_pos = T_target.t - T_current.t  # 3x1 vector
+        R_current = T_current.R  # 3x3
+        R_target = T_target.R  # 3x3
+
+        # rotation matrix error
+        dx_rot = R.from_matrix(R_target @ R_current.T).as_rotvec()
+
+        dx = np.zeros(6)
+        dx[:3] = dx_pos
+        dx[3:] = dx_rot
+
+        lambda_sq = 0.01  # damping factor squared
+        JJT = J @ J.T
+        dq = J.T @ np.linalg.inv(JJT + lambda_sq * np.eye(JJT.shape[0])) @ dx
+
+        dq_null = 0.1 * (N @ (dq + singularity_gradient(qIK, endEffector)))
+        qNext = (qIK + dq_null).T
+
+        # --- Map to nearest equivalent angles & smooth ---
+        qSmooth = mapToNearest(prevConfig, qNext)
+        alpha = 0.5
+        qFiltered = alpha * qSmooth + (1 - alpha) * prevConfig
+        # Store trajectory
+        configTraj[i, :] = qFiltered
+        prevConfig = qFiltered
+        # Joint velocity
+        if i == 0:
+            velJointTraj[i, :] = np.zeros(len(qStart))
+        else:
+            dt = tFine[i] - tFine[i - 1]
+            velJointTraj[i, :] = (configTraj[i, :] - configTraj[i - 1, :]) / dt
+
+    # --- Compute delta in degrees if needed ---
+    deltaJointRad = np.diff(configTraj, axis=0)
+    deltaJointDeg = np.rad2deg(deltaJointRad)
+    absDeltaJointDeg = np.abs(deltaJointDeg)
+
+    # --- Final smooth trajectory ---
+    goal_move = np.hstack((configTraj, velJointTraj))
+    allConfigTraj = np.concatenate((linear_move, search_move, goal_move))
+    np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
+"""

@@ -340,9 +340,10 @@ si = ob.SpaceInformation(space)
 start = ob.State(space)
 goal = ob.State(space)
 
-start().setXYZ(0.1,0.1,0.5)
+start().setXYZ(0.8, 0.239, 0.482)
+
 start().rotation().setIdentity()
-goal().setXYZ(1.623, 0.577, 0.322)
+goal().setXYZ(1.8, 0.34, 0.37)
 
 # Equivalent of:
 # qx = AngleAxis(pi, X)
@@ -353,6 +354,7 @@ qx = R.from_rotvec(np.pi * np.array([1, 0, 0]))
 qy = R.from_rotvec((np.pi/4) * np.array([0, 1, 0]))
 
 q = (qy * qx).as_quat()  # returns [x,y,z,w]
+#q = qx.as_quat()
 
 goal().rotation().x = q[0]
 goal().rotation().y = q[1]
@@ -398,7 +400,7 @@ if solved:
     #       Get solution path
     # -----------------------------
     path = pdef.getSolutionPath()
-    path.interpolate(300)  # densify path
+    path.interpolate(1000)  # densify path
 
     # -----------------------------
     #        Save path to CSV
@@ -497,7 +499,7 @@ endEffector = 'tool'  # name of end-effector link
 # Define weights for position (x,y,z) and orientation (roll, pitch, yaw)
 weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
 # Initial joint configuration guess
-q0 = np.zeros(robot.n)  # or your previous configuration
+q0 = [0.418989000000000,	-3.036302000000000	,2.118606000000000	,2.376801000000000	,-1.438350000000000	,-2.899109000000000	,1.585092000000000]  # or your previous configuration
 
 # --- Parameters ---
 T = 1.0  # total trajectory time

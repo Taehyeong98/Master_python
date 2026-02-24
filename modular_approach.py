@@ -26,7 +26,7 @@ import qpsolvers
 
 # Load URDF of Robot
 robot = rtb.Robot.URDF(matlab + "imed_robot.urdf")
-
+print("joint_limit",robot.qlim)
 endEffector = 'tool'  # name of end-effector link
 
 # Define weights for position (x,y,z) and orientation (roll, pitch, yaw)
@@ -54,14 +54,18 @@ T_target.t = goal_pos
 T_target.R = R.from_quat(goal_ori).as_matrix()
 solver = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
                            q0=park_pose_rad)  # replace with your Python IK function
-print('goal_pose', solver.q)
-goal_pose_q = solver.q # 1x7
+
+q_sol = solver.q
+q_clipped = np.clip(q_sol, robot.qlim[0], robot.qlim[1])
+
+print("Clipped solution:", q_clipped)
+goal_pose_q = q_clipped # 1x7
 
 #--------------------#
 #  Linear Movement   #
 #--------------------#
 allConfigTraj =[]
-linear_time = 10
+linear_time = 30
 linear_movement = np.zeros((linear_time,len(start_pose_rad)))
 linear_movement[0:] = start_pose_rad
 x_start = start_pose_rad[0]
@@ -103,19 +107,14 @@ for j in range(goal_time_joint):
     twist_movement_2[j]= twist_start_2 - twist_step * (j+1)
     twist_movement_3[j] = twist_start_3 + twist_step * (j+1)
 
-goal_time = goal_time_joint*(n_joints-1)+add_time
+goal_time = goal_time_joint*n_joints
 goal_movement = np.zeros((goal_time,len(start_pose_rad)))
 goal_distance =np.zeros(len(start_pose_rad))
 step_joint =np.zeros(len(start_pose_rad))
 goal_start = np.zeros(len(start_pose_rad))
 for i in range(n_joints):
 
-    if i == 1:
-        start = park_pose_rad[i] + ninety_rad
-    elif i == 2:
-        start = park_pose_rad[i] - ninety_rad
-    else:
-        start = park_pose_rad[i]
+    start = park_pose_rad[i]
 
     goal_distance = goal_pose_q[i] - start
     step = goal_distance / goal_time_joint
@@ -148,6 +147,7 @@ step_7 = np.zeros((goal_time,len(start_pose_rad)))
 step_8 = np.zeros((goal_time,len(start_pose_rad)))
 step_9 = np.zeros((goal_time,len(start_pose_rad)))
 q_current = np.zeros(len(start_pose_rad))
+# movement joint 1
 for i in range(goal_time_joint):
     # Combine prismatic joint + fixed revolute joints
     step_1 = np.concatenate(([goal_movement_joint[i, 0]], park_pose_rad[1:]))
@@ -156,6 +156,7 @@ for i in range(goal_time_joint):
 
 q_current = allConfigTraj[goal_time_joint-1,:]
 print("q_current:",q_current)
+""""
 # twist 90 joint 2
 for i in range(goal_time_joint):
 
@@ -174,59 +175,60 @@ for i in range(goal_time_joint):
 
 q_current = allConfigTraj[3*goal_time_joint-1,:]
 print("q_current:",q_current)
+"""
+
 # movement joint 2
 for i in range(goal_time_joint):
     step_4 = q_current.copy()
     step_4[1] = goal_movement_joint[i, 1]  # modify joint 3 only
-    allConfigTraj[3*goal_time_joint+i, :] = step_4
+    allConfigTraj[goal_time_joint+i, :] = step_4
+
+q_current = allConfigTraj[2*goal_time_joint-1,:]
+print("q_current:",q_current)
+# movement joint 3
+for i in range(goal_time_joint):
+    step_6 = q_current.copy()  # copy current config
+    step_6[2] = goal_movement_joint[i, 2]
+    allConfigTraj[2*goal_time_joint+i, :] = step_6
+
+q_current = allConfigTraj[3*goal_time_joint-1,:]
+print("q_current:",q_current)
+
+# movement joint 4
+for i in range(goal_time_joint):
+    step_5 = q_current.copy()  # copy current config
+    step_5[3] = goal_movement_joint[i, 3]  # modify joint 3 only
+    allConfigTraj[3*goal_time_joint+i, :] = step_5
 
 q_current = allConfigTraj[4*goal_time_joint-1,:]
 print("q_current:",q_current)
-# movement joint 4
-for i in range(goal_time_joint):
-    step_6 = q_current.copy()  # copy current config
-    step_6[3] = goal_movement_joint[i, 3]  # modify joint 4 only
-    step_6[2] = goal_movement_joint[i, 2]
-    allConfigTraj[4*goal_time_joint+i, :] = step_6
 
-q_current = allConfigTraj[5*goal_time_joint-1,:]
-print("q_current:",q_current)
-"""
-# movement joint 3
-for i in range(goal_time_joint):
-    step_5 = q_current.copy()  # copy current config
-    step_5[2] = goal_movement_joint[i, 2]  # modify joint 3 only
-    allConfigTraj[5*goal_time_joint+i, :] = step_5
-
-q_current = allConfigTraj[6*goal_time_joint-1,:]
-print("q_current:",q_current)
-"""
 # movement joint 5
 for i in range(goal_time_joint):
     step_7 = q_current.copy()  # copy current config
     step_7[4] = goal_movement_joint[i, 4]  # modify joint 5 only
-    allConfigTraj[5*goal_time_joint+i, :] = step_7
+    allConfigTraj[4*goal_time_joint+i, :] = step_7
 
-q_current = allConfigTraj[6*goal_time_joint-1,:]
+q_current = allConfigTraj[5*goal_time_joint-1,:]
 print("q_current:",q_current)
 # movement joint 6
 for i in range(goal_time_joint):
     step_8 = q_current.copy()  # copy current config
     step_8[5] = goal_movement_joint[i, 5]  # modify joint 6 only
-    allConfigTraj[6*goal_time_joint+i, :] = step_8
+    allConfigTraj[5*goal_time_joint+i, :] = step_8
 
-q_current = allConfigTraj[7*goal_time_joint-1,:]
+q_current = allConfigTraj[6*goal_time_joint-1,:]
 print("q_current:",q_current)
 # movement joint 7
 for i in range(goal_time_joint):
     step_9 = q_current.copy()  # copy current config
     step_9[6] = goal_movement_joint[i, 6]  # modify joint 7 only
-    allConfigTraj[7*goal_time_joint+i, :] = step_9
+    allConfigTraj[6*goal_time_joint+i, :] = step_9
 
-q_current = allConfigTraj[8*(goal_time_joint-1),:]
+q_current = allConfigTraj[7*(goal_time_joint-1),:]
 
-allConfigTraj = np.concatenate((linear_movement,allConfigTraj))
-np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
+trajectory  = np.concatenate((linear_movement,allConfigTraj))
+np.savetxt(matlab + "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
 
 
 
