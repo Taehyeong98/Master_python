@@ -19,7 +19,7 @@ import csv
 import random
 import io
 import sys
-
+from roboticstoolbox import jtraj
 matlab = "/Users/kim/Documents/MATLAB/New Folder/path_planning/"
 import fcl
 import qpsolvers
@@ -33,19 +33,19 @@ endEffector = 'tool'  # name of end-effector link
 weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
 
 # --- Initialize configuration ---
-start_pose_deg = [0.1,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
+start_pose_deg = [0.3,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
 q_start_prismatic = start_pose_deg[0]
 q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2–7) to radians
 start_pose_rad = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
 
 # park pose
-park_pose_deg = [1.4,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]
+park_pose_deg = [1.1,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]
 q_park_prismatic = park_pose_deg[0]
 q_park_revolute = np.radians(park_pose_deg[1:7])
 park_pose_rad = np.concatenate(([q_park_prismatic], q_park_revolute))
 
 # goal pose
-goal_pos = [1.623, 0.577, 0.322]
+goal_pos = [1.4, 0.3117, 0.333]
 qx = R.from_rotvec(np.pi * np.array([1, 0, 0]))
 qy = R.from_rotvec((np.pi/4) * np.array([0, 1, 0]))
 goal_ori = (qy * qx).as_quat()  # returns [x,y,z,w]
@@ -54,12 +54,14 @@ T_target.t = goal_pos
 T_target.R = R.from_quat(goal_ori).as_matrix()
 solver = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
                            q0=park_pose_rad)  # replace with your Python IK function
-
+while (solver.success== False):
+    print("IK solver failed, try again")
+    print(park_pose_rad)
+    solver = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
+                            q0=park_pose_rad)  # replace with your Python
 q_sol = solver.q
-q_clipped = np.clip(q_sol, robot.qlim[0], robot.qlim[1])
-
-print("Clipped solution:", q_clipped)
-goal_pose_q = q_clipped # 1x7
+print(q_sol)
+goal_pose_q = q_sol # 1x7
 
 #--------------------#
 #  Linear Movement   #
@@ -88,10 +90,17 @@ for i in range(linear_time):
     linear_movement[i] = q_current
 
 park_pose_rad = linear_movement[linear_time-1,:]
+
+traj = jtraj(start_pose_rad, goal_pose_q, 500)
+
+#trajectory  = np.concatenate((linear_movement,traj.q))
+trajectory = traj.q
+np.savetxt(matlab + "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
+"""
 #--------------------#
 #    GOAL REGION     #
 #--------------------#
-goal_time_joint = 30
+goal_time_joint = 10
 n_joints = len(start_pose_rad)
 goal_movement_joint = np.zeros((goal_time_joint,len(start_pose_rad)))
 add_time = goal_time_joint*2 # 90 deg for joint (2) and joint (3)
@@ -156,26 +165,7 @@ for i in range(goal_time_joint):
 
 q_current = allConfigTraj[goal_time_joint-1,:]
 print("q_current:",q_current)
-""""
-# twist 90 joint 2
-for i in range(goal_time_joint):
 
-    step_2 = q_current.copy()
-    step_2[1] = twist_movement_2[i]  # modify joint 2 only
-
-    allConfigTraj[goal_time_joint + i, :] = step_2
-
-q_current = allConfigTraj[2*goal_time_joint-1,:]
-print("q_current:",q_current)
-# twist -90° joint 3
-for i in range(goal_time_joint):
-    step_3 = q_current.copy()
-    step_3[2] = twist_movement_3[i]  # modify joint 3 only
-    allConfigTraj[2*goal_time_joint+i, :] = step_3
-
-q_current = allConfigTraj[3*goal_time_joint-1,:]
-print("q_current:",q_current)
-"""
 
 # movement joint 2
 for i in range(goal_time_joint):
@@ -234,8 +224,8 @@ np.savetxt(matlab + "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
 #---------------------#
 trajectory[:,0] = trajectory[:,0]*1000
 trajectory[:,1:7] = trajectory[:,1:7]*180/np.pi
-np.savetxt(matlab + "modular_normal.txt", allConfigTraj, delimiter=" ", fmt="%.2f")
-
+np.savetxt(matlab + "modular_normal.txt", trajectory, delimiter=" ", fmt="%.2f")
+"""
 
 
 
