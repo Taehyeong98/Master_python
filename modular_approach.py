@@ -23,6 +23,47 @@ from roboticstoolbox import jtraj
 matlab = "/Users/kim/Documents/MATLAB/New Folder/path_planning/"
 import fcl
 import qpsolvers
+import time
+
+start_time = time.time()
+#--------------------#
+#      Pybullet      #
+#--------------------#
+# Connect to DIRECT
+bc = bullet_client.BulletClient(connection_mode=p.DIRECT)
+
+# Optional: set search path for meshes
+bc.setAdditionalSearchPath(pybullet_data.getDataPath())
+
+robotId=bc.loadURDF(matlab+"imed_robot.urdf")
+position = [0.35, 0.35, -0.55]        # must be length 3
+# Axis-angle
+angle = -np.pi/4              # rotation angle in radians
+axis = np.array([1, 0, 0])    # rotation axis (must be normalized)
+axis = axis / np.linalg.norm(axis)  # just to be safe
+
+# Convert to quaternion
+r = R.from_rotvec(axis * angle)  # axis-angle â†’ rotation vector
+orientation = r.as_quat()
+scale = [1,1,1]  # must be length 3
+# Create collision shape and visual shape
+collisionShapeId = bc.createCollisionShape(shapeType=bc.GEOM_MESH,
+                                          fileName='voxel_alpha.stl',
+                                          meshScale=scale)
+visualShapeId = bc.createVisualShape(shapeType=bc.GEOM_MESH,
+                                    fileName='voxel_alpha.stl',
+                                    meshScale=scale)
+
+# Create a multi-body using the mesh
+obstacleId = bc.createMultiBody(baseMass=0,
+                                baseCollisionShapeIndex=collisionShapeId,
+                                baseVisualShapeIndex=visualShapeId,
+                                basePosition=position,
+                                baseOrientation=orientation)
+
+
+
+
 
 # Load URDF of Robot
 robot = rtb.Robot.URDF(matlab + "imed_robot.urdf")
@@ -39,13 +80,13 @@ q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2â
 start_pose_rad = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
 
 # park pose
-park_pose_deg = [1.1,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]
+park_pose_deg = [0.7,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]
 q_park_prismatic = park_pose_deg[0]
 q_park_revolute = np.radians(park_pose_deg[1:7])
 park_pose_rad = np.concatenate(([q_park_prismatic], q_park_revolute))
 
 # goal pose
-goal_pos = [1.4, 0.3117, 0.333]
+goal_pos = [1.4, 0.3117, 0.37]
 qx = R.from_rotvec(np.pi * np.array([1, 0, 0]))
 qy = R.from_rotvec((np.pi/4) * np.array([0, 1, 0]))
 goal_ori = (qy * qx).as_quat()  # returns [x,y,z,w]
@@ -71,7 +112,7 @@ linear_time = 30
 linear_movement = np.zeros((linear_time,len(start_pose_rad)))
 linear_movement[0:] = start_pose_rad
 x_start = start_pose_rad[0]
-x_goal = goal_pose_q[0]
+x_goal = park_pose_rad[0]
 
 linear_distance = x_goal - x_start
 
@@ -91,11 +132,99 @@ for i in range(linear_time):
 
 park_pose_rad = linear_movement[linear_time-1,:]
 
-traj = jtraj(start_pose_rad, goal_pose_q, 500)
+traj = jtraj(park_pose_rad, goal_pose_q, 500)
 
-#trajectory  = np.concatenate((linear_movement,traj.q))
-trajectory = traj.q
+trajectory  = np.concatenate((linear_movement,traj.q))
+#trajectory = traj.q
+
 np.savetxt(matlab + "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
+
+# --------------------#
+#  COLLISION CHECK   #
+# --------------------#
+
+# Get joint indices
+num_joints = p.getNumJoints(robotId)
+joint_indices = list(range(num_joints))
+collision_penalty = 0
+
+for waypoints, joint_positions in enumerate(allConfigTraj):
+    # Set joint positions (robot, joint(i), theta)
+    for joint_index, joint_value in zip(joint_indices, joint_positions):
+        p.resetJointState(robotId, joint_index, joint_value)
+
+    bc.stepSimulation()
+    # --- Environment collision ---
+    contacts_env = bc.getClosestPoints(robotId, obstacleId, distance=0.001)
+
+    # --- Self collision ---
+    contacts_self_raw = bc.getClosestPoints(robotId, robotId, distance=0.001)
+
+    # Remove trivial contacts (same link pairs)
+    contacts_self = []
+    unique_pairs = set()
+    ee_link = 7
+    for c in contacts_self_raw:
+        linkA = c[3]
+        linkB = c[4]
+        distance = c[8]
+
+        # Only consider real penetration
+        if distance >= -1e-5:
+            continue
+
+        # Ignore same link
+        if linkA == linkB:
+            continue
+
+        # Ignore adjacent (parent-child)
+        parentA = p.getJointInfo(robotId, linkA)[16] if linkA != -1 else -1
+        parentB = p.getJointInfo(robotId, linkB)[16] if linkB != -1 else -1
+
+        if parentA == linkB or parentB == linkA:
+            continue
+
+        pair = tuple(sorted((linkA, linkB)))
+
+        if pair not in unique_pairs:
+            unique_pairs.add(pair)
+
+            print(f"Self collision between link {linkA} and link {linkB} at waypoint {waypoints}")
+            real_self_collision = True
+    if contacts_env:
+        print(f"Environment Collision at waypoint {waypoints}")
+
+end = time.time()
+print("Execution time:", end - start_time, "seconds")
+execution_time = end - start_time
+with open(matlab+"execution_time_modular.txt", "a") as file:
+    file.write(f"{execution_time}\n")
+
+end_pose = trajectory[-1,:]
+FK = robot.fkine(end_pose)
+end_position = FK.t
+error = np.linalg.norm(goal_pos-end_position)
+
+with open(matlab+"error_position_modular.txt", "a") as file:
+    file.write(f"{error}\n")
+
+# Convert measured rotation to quaternion
+R_meas = FK.R
+q_meas = R.from_matrix(R_meas).as_quat()  # [x, y, z, w]
+
+# Quaternion difference
+# q_err = q_ref^{-1} * q_meas
+r_ref_inv = R.from_quat(goal_ori).inv()
+r_err = r_ref_inv * R.from_quat(q_meas)
+
+# Orientation error as angle (radians)
+theta_err = r_err.magnitude()
+theta_err_deg = np.degrees(theta_err)
+
+print("Orientation error (deg):", theta_err_deg)
+
+with open(matlab+"error_orientation_modular.txt", "a") as file:
+    file.write(f"{theta_err_deg}\n")
 """
 #--------------------#
 #    GOAL REGION     #

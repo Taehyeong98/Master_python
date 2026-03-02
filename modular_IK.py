@@ -123,14 +123,15 @@ weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
 
 # --- Initialize configuration ---
 #start_pose_deg = [0.1,-90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
-start_pose_deg = [0.2,-90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
+start_pose_deg = [0.3,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
 
 
 
 q_start_prismatic = start_pose_deg[0]
 q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2–7) to radians
 start_pose_rad = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
-
+FK = robot.fkine(start_pose_rad)
+print(FK.t)
 # park pose
 park_pose_deg = [1.4, 90.0, 90.0, -90.0, 0.0, -90.0, 0.0] # +90° in joint (2) better!
 q_park_prismatic = park_pose_deg[0]

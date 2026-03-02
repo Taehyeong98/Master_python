@@ -19,6 +19,8 @@ import csv
 import random
 import io
 import sys
+from roboticstoolbox import mstraj
+import time
 
 # FCL
 import fcl
@@ -185,12 +187,12 @@ class GoalRegionSampler(ob.StateSampler):
 def samplerAllocator(space):
     return GoalRegionSampler(space, goalPos, GOAL, treeReachedGoalRegion)
 
+start_time = time.time()
 #--------------------#
 #        STL         #
 #--------------------#
 # LOAD STL
 mesh = trimesh.load(matlab+'voxel_alpha.stl')
-print('finish!')
 
 # Setting correct pose of STL
 #mesh.vertices *= 0.001
@@ -333,9 +335,10 @@ si = ob.SpaceInformation(space)
 start = ob.State(space)
 goal = ob.State(space)
 
-start().setXYZ(0.8, 0.239, 0.482)
+start().setXYZ(0.36860002, 0.24499995, 0.51539998)
 
-goal().setXYZ(1.8, 0.34, 0.37)
+goal_position =[1.4, 0.3117, 0.37]
+goal().setXYZ(goal_position[0], goal_position[1], goal_position[2])
 
 # Equivalent of:
 # qx = AngleAxis(pi, X)
@@ -383,7 +386,7 @@ space.setStateSamplerAllocator(ob.StateSamplerAllocator(samplerAllocator))
 
 si.setStateValidityChecker(ob.StateValidityCheckerFn(validityChecker))
 si.setup()
-
+start_plan = time.time()
 # Create planner
 planner = og.RRTstar(si)
 planner.setProblemDefinition(pdef)
@@ -443,39 +446,44 @@ if solved:
 else:
     print("No solution found.")
 
+end_plan = time.time()
+planning_time = end_plan - start_plan
+print("Planning time:", end_plan - start_plan)
 #--------------------#
 #      Pybullet      #
 #--------------------#
-# Connect in DIRECT mode (no GUI)
-#pybul_start = p.connect(p.GUI)
-physicsClient = p.connect(p.DIRECT)
-# Optional: set search path for meshes
-p.setAdditionalSearchPath(pybullet_data.getDataPath())
+# Connect to GUI
+bc = bullet_client.BulletClient(connection_mode=p.DIRECT)
 
-robotId=p.loadURDF(matlab+"imed_robot.urdf",
-                   flags = p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
-                   )
+# Optional: set search path for meshes
+bc.setAdditionalSearchPath(pybullet_data.getDataPath())
+
+robotId=bc.loadURDF(matlab+"imed_robot.urdf")
 position = [0.35, 0.35, -0.55]        # must be length 3
+# Axis-angle
+angle = -np.pi/4              # rotation angle in radians
+axis = np.array([1, 0, 0])    # rotation axis (must be normalized)
+axis = axis / np.linalg.norm(axis)  # just to be safe
 
 # Convert to quaternion
 r = R.from_rotvec(axis * angle)  # axis-angle → rotation vector
 orientation = r.as_quat()
-scale = [0.001,0.001,0.001]  # must be length 3
+scale = [1,1,1]  # must be length 3
 # Create collision shape and visual shape
-collisionShapeId = p.createCollisionShape(shapeType=p.GEOM_MESH,
+collisionShapeId = bc.createCollisionShape(shapeType=bc.GEOM_MESH,
                                           fileName='voxel_alpha.stl',
                                           meshScale=scale)
-visualShapeId = p.createVisualShape(shapeType=p.GEOM_MESH,
+visualShapeId = bc.createVisualShape(shapeType=bc.GEOM_MESH,
                                     fileName='voxel_alpha.stl',
                                     meshScale=scale)
 
 # Create a multi-body using the mesh
-obstacleId = p.createMultiBody(baseMass=0,
+obstacleId = bc.createMultiBody(baseMass=0,
                                 baseCollisionShapeIndex=collisionShapeId,
                                 baseVisualShapeIndex=visualShapeId,
                                 basePosition=position,
-                                baseOrientation=orientation
-                               )
+                                baseOrientation=orientation)
+
 
 
 
@@ -488,15 +496,17 @@ path_data = np.loadtxt(matlab + 'path3d.csv', delimiter=",")
 # Number of waypoints (rows)
 waypoints = path_data.shape[0]
 
-print("Path data:\n", path_data)
-print(waypoints)
+
 
 endEffector = 'tool'  # name of end-effector link
 
 # Define weights for position (x,y,z) and orientation (roll, pitch, yaw)
 weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
 # Initial joint configuration guess
-q0 = [0.418989000000000,	-3.036302000000000	,2.118606000000000	,2.376801000000000	,-1.438350000000000	,-2.899109000000000	,1.585092000000000]  # or your previous configuration
+start_pose_deg = [0.3,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
+q_start_prismatic = start_pose_deg[0]
+q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2–7) to radians
+q0 = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
 
 # --- Parameters ---
 T = 1.0  # total trajectory time
@@ -599,16 +609,106 @@ deltaJointRad = np.diff(configTraj, axis=0)
 deltaJointDeg = np.rad2deg(deltaJointRad)
 absDeltaJointDeg = np.abs(deltaJointDeg)
 
-
-from roboticstoolbox import mstraj
-
+#--------------------#
+#    FINE TUNING     #
+#--------------------#
 
 qdmax = np.ones(configTraj.shape[1]) * 1.0   # 1 rad/s for each joint
-traj = mstraj(configTraj, dt=0.05, tacc=0.2, qdmax=qdmax)
+traj = mstraj(configTraj, dt=0.1, tacc=0.3, qdmax=qdmax)
 allConfigTraj = traj.q
 # --- Final smooth trajectory ---
 #allConfigTraj = np.hstack((configTraj, velJointTraj))
 np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
+#--------------------#
+#  COLLISION CHECK   #
+#--------------------#
+
+# Get joint indices
+num_joints = p.getNumJoints(robotId)
+joint_indices = list(range(num_joints))
+collision_penalty = 0
+for waypoints, joint_positions in enumerate(allConfigTraj):
+    # Set joint positions (robot, joint(i), theta)
+    for joint_index, joint_value in zip(joint_indices, joint_positions):
+        p.resetJointState(robotId, joint_index, joint_value)
+
+    bc.stepSimulation()
+    # --- Environment collision ---
+    contacts_env = bc.getClosestPoints(robotId, obstacleId, distance=0.001)
+
+    # --- Self collision ---
+    contacts_self_raw = bc.getClosestPoints(robotId, robotId, distance=0.001)
+
+    # Remove trivial contacts (same link pairs)
+    contacts_self = []
+    unique_pairs = set()
+    ee_link = 7
+    for c in contacts_self_raw:
+        linkA = c[3]
+        linkB = c[4]
+        distance = c[8]
+
+        # Only consider real penetration
+        if distance >= -1e-5:
+            continue
+
+        # Ignore same link
+        if linkA == linkB:
+            continue
+
+        # Ignore adjacent (parent-child)
+        parentA = p.getJointInfo(robotId, linkA)[16] if linkA != -1 else -1
+        parentB = p.getJointInfo(robotId, linkB)[16] if linkB != -1 else -1
+
+        if parentA == linkB or parentB == linkA:
+            continue
+
+        pair = tuple(sorted((linkA, linkB)))
+
+        if pair not in unique_pairs:
+            unique_pairs.add(pair)
+
+            print(f"Self collision between link {linkA} and link {linkB} at waypoint {waypoints}")
+            real_self_collision = True
+    if contacts_env:
+        print(f"Environment Collision at waypoint {waypoints}")
+
+with open(matlab+"planning_time_sampling.txt", "a") as file:
+    file.write(f"{planning_time}\n")
+
+end = time.time()
+execution_time = end - start_time
+print("Execution time:", end - start_time, "seconds")
+with open(matlab+"execution_time_sampling.txt", "a") as file:
+    file.write(f"{execution_time}\n")
+
+
+end_pose = allConfigTraj[-1,:]
+FK = robot.fkine(end_pose)
+end_position = FK.t
+error = np.linalg.norm(goal_position-end_position)
+
+with open(matlab+"error_position_sampling.txt", "a") as file:
+    file.write(f"{error}\n")
+
+# Convert measured rotation to quaternion
+R_meas = FK.R
+q_meas = R.from_matrix(R_meas).as_quat()  # [x, y, z, w]
+
+# Quaternion difference
+# q_err = q_ref^{-1} * q_meas
+r_ref_inv = R.from_quat(q).inv()
+r_err = r_ref_inv * R.from_quat(q_meas)
+
+# Orientation error as angle (radians)
+theta_err = r_err.magnitude()
+theta_err_deg = np.degrees(theta_err)
+
+print("Orientation error (deg):", theta_err_deg)
+
+with open(matlab+"error_orientation_sampling.txt", "a") as file:
+    file.write(f"{theta_err_deg}\n")
+
 
 """
 while penalty > 10:
@@ -793,60 +893,6 @@ while penalty > 10:
     allConfigTraj = np.hstack((configTraj, velJointTraj))
     np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
 
-#--------------------#
-#  COLLISION CHECK   #
-#--------------------#
-
-# Get joint indices
-num_joints = p.getNumJoints(robotId)
-joint_indices = list(range(num_joints))
-collision_penalty = 0
-for waypoints, joint_positions in enumerate(configTraj):
-    # Set joint positions (robot, joint(i), theta)
-    for joint_index, joint_value in zip(joint_indices, joint_positions):
-        p.resetJointState(robotId, joint_index, joint_value)
-
-    # --- Environment collision ---
-    contacts_env = p.getClosestPoints(robotId, obstacleId, distance=0)
-
-    # --- Self collision ---
-    contacts_self_raw = p.getClosestPoints(robotId, robotId, distance=0)
-
-    # Remove trivial contacts (same link pairs)
-    contacts_self = []
-    unique_pairs = set()
-    ee_link = 7
-    for c in contacts_self_raw:
-        linkA =c[3]
-        linkB =c[4]
-
-        # Only care if EE is involved
-        if ee_link not in (linkA, linkB):
-            continue
-
-        # Identify the "other" link
-        other_link = linkB if linkA == ee_link else linkA
-
-        # Ignore same link
-        if other_link == ee_link:
-            continue
-
-        # Ignore parent-child contact
-        parent = p.getJointInfo(robotId, ee_link)[16]
-        if other_link == parent:
-            continue
-
-        pair = tuple(sorted((ee_link, other_link)))
-
-        if pair not in unique_pairs:
-            unique_pairs.add(pair)
-            print(f"End-effector collides with link {other_link}")
-            if other_link == 3 | other_link == 4:
-                collision_penalty +=1
-    if contacts_env:
-        print(f"Collision at waypoint {waypoints}")
-        print("  → Environment collision")
-attempt_collision = 0
 while collision_penalty > 0 and attempt_collision < 5:
     print("Collision penalty:", collision_penalty)
     print("retry IK SOLVER")
