@@ -503,24 +503,9 @@ q_start_revolute = np.radians(start_pose_deg[1:7])  # Convert revolute joints (2
 q0 = np.concatenate(([q_start_prismatic], q_start_revolute))  # Combine back into one joint vector
 
 # --- Parameters ---
-T = 1.0  # total trajectory time
-waypoints = path_data.shape[0]  # number of waypoints
-tWp = np.linspace(0, T, waypoints)  # time for each waypoint
+
 allConfigTraj = []
-
-# --- Extract XYZ positions ---
-posX = path_data[:, 0]
-posY = path_data[:, 1]
-posZ = path_data[:, 2]
-
-# --- Cubic spline for position (clamped: zero velocity at start/end) ---
-# 'bc_type' = 'clamped' ensures zero velocity at endpoints
-splineX = CubicSpline(tWp, posX, bc_type='clamped')
-splineY = CubicSpline(tWp, posY, bc_type='clamped')
-splineZ = CubicSpline(tWp, posZ, bc_type='clamped')
-
-tFine = np.linspace(0, T, waypoints)  # interpolated time
-posTraj = np.column_stack((splineX(tFine), splineY(tFine), splineZ(tFine)))
+quaternions = []
 
 # --- Quaternion interpolation ---
 # MATLAB: quaternion(w,x,y,z)
@@ -531,8 +516,6 @@ for j in range(waypoints):
     w, x, y, z = path_data[j, 6], path_data[j, 3], path_data[j, 4], path_data[j, 5]
     quaternions.append(R.from_quat([x, y, z, w]))
 
-slerp = Slerp(tWp, R.concatenate(quaternions))
-qInterp = slerp(tFine)  # Rotation objects for each fine time step
 
 # --- Initialize configuration ---
 qStart = q0  # Python list or numpy array
@@ -546,7 +529,7 @@ penalty = 0
 for i in range(waypoints):
     # Desired end-effector pose
     T_target.t = posTraj[i, :]
-    qk = qInterp[i]
+    qk = quaternions[i]
     T_target.R = qk.as_matrix()  # 3x3 rotation matrix
     # Solve IK
     configNow = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
@@ -591,25 +574,33 @@ for i in range(waypoints):
     # Store trajectory
     configTraj[i, :] = qFiltered
     prevConfig = qFiltered
-    # Joint velocity
-    if i == 0:
-        velJointTraj[i, :] = np.zeros(len(qStart))
-    else:
-        dt = tFine[i] - tFine[i - 1]
-        velJointTraj[i, :] = (configTraj[i, :] - configTraj[i - 1, :]) / dt
+
 
 # --- Compute delta in degrees if needed ---
 deltaJointRad = np.diff(configTraj, axis=0)
 deltaJointDeg = np.rad2deg(deltaJointRad)
 absDeltaJointDeg = np.abs(deltaJointDeg)
 
-# --------------------#
-#    FINE TUNING     #
-# --------------------#
+#qdmax = np.ones(configTraj.shape[1]) * 1.0   # 1 rad/s for each joint
+#traj = mstraj(configTraj, dt=0.1, tacc=0.3, qdmax=qdmax)
+#allConfigTraj = traj.q
 
-qdmax = np.ones(configTraj.shape[1]) * 1.0  # 1 rad/s for each joint
-traj = mstraj(configTraj, dt=0.1, tacc=0.3, qdmax=qdmax)
-allConfigTraj = traj.q
+#--------------------#
+#    Cubic Spline    #
+#--------------------#
+# Create array to store smooth trajectory
+t_waypoints = np.arange(waypoints)  # 0,1,2,...,waypoints-1
+num_samples = waypoints*5  # number of points in final trajectory
+t_samples = np.linspace(0, waypoints-1, num_samples)
+num_joints = configTraj.shape[1]
+print(num_joints)
+allConfigTraj = np.zeros((num_samples, num_joints))
+
+# Interpolate each joint separately
+for j in range(num_joints):
+    cs = CubicSpline(t_waypoints, configTraj[:,j], bc_type='clamped')  # clamped ensures zero slope at ends
+    allConfigTraj[:, j] = cs(t_samples)
+
 # --- Final smooth trajectory ---
 # allConfigTraj = np.hstack((configTraj, velJointTraj))
 np.savetxt( "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
