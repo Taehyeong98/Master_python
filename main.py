@@ -94,29 +94,17 @@ def validityChecker(state):
     # Extract SE3 state
     s = state  # already SE3 state in Python
     pos = np.array([s.getX(), s.getY(), s.getZ()])
-    INITIAL_RADIUS = 0.3
     GOAL = 0.1
     # ------------- 2️⃣ Move robot (sphere) -------------
     tf = fcl.Transform(np.eye(3), pos)
     path_point.setTransform(tf)
 
     inGoalRegion = np.linalg.norm(pos - goalPos) < GOAL_RADIUS
-    InitialRegion = np.linalg.norm(pos - startPos) < INITIAL_RADIUS
     if np.linalg.norm(pos - goalPos) < GOAL:
         return True
 
-    if InitialRegion:
-        req = fcl.CollisionRequest()
-        res = fcl.CollisionResult()
-        fcl.collide(path_point, obj, req, res)
-        #fcl.collide(path_point, s1_obj, req, res)
-        #fcl.collide(path_point, s2_obj, req, res)
-        #fcl.collide(path_point, s3_obj, req, res)
-        #fcl.collide(path_point, s4_obj, req, res)
-        if res.is_collision:
-            return False
     # ------------- 3️⃣ Ground collision (always obstacle) -------------
-    if not inGoalRegion:
+    if not inGoalRegion :
         req = fcl.CollisionRequest()
         res = fcl.CollisionResult()
         fcl.collide(path_point, groundBlock, req, res)
@@ -213,7 +201,6 @@ model.endModel()
 
 obj = fcl.CollisionObject(model)
 
-
 # Axis-angle rotation
 axis = np.array([1.0, 0.0, 0.0])
 axis = axis / np.linalg.norm(axis)
@@ -308,9 +295,19 @@ tf_box = fcl.Transform(np.eye(3), blockCenter)
 groundBlock.setTransform(tf_box)
 
 #--------------------#
+#     ROBOT URDF     #
+#--------------------#
+
+# Load URDF of Robot
+robot = rtb.Robot.URDF(matlab + "imed_robot.urdf")
+
+print("robot urdf initialized")
+
+
+#--------------------#
 #    Path Planner    #
 #--------------------#
-point_r = 0.1
+point_r = 0.06
 point_shape = fcl.Sphere(point_r)
 path_point = fcl.CollisionObject(point_shape)
 
@@ -334,8 +331,14 @@ si = ob.SpaceInformation(space)
 # START & GOAL
 start = ob.State(space)
 goal = ob.State(space)
+start_pose_deg = [0.2,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
+q_start_prismatic = start_pose_deg[0]
+q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2–7) to radians
+q0 = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
 
-start().setXYZ(0.36860002, 0.24499995, 0.51539998)
+FK_start = robot.fkine (q0)
+start_position = FK_start.t
+start().setXYZ(start_position[0], start_position[1], start_position[2])
 
 goal_position =[1.4, 0.3117, 0.37]
 goal().setXYZ(goal_position[0], goal_position[1], goal_position[2])
@@ -487,8 +490,6 @@ obstacleId = bc.createMultiBody(baseMass=0,
 
 
 
-# Load URDF of Robot
-robot = rtb.Robot.URDF(matlab + "imed_robot.urdf")
 
 # Load Path
 path_data = np.loadtxt(matlab + 'path3d.csv', delimiter=",")
@@ -502,11 +503,6 @@ endEffector = 'tool'  # name of end-effector link
 
 # Define weights for position (x,y,z) and orientation (roll, pitch, yaw)
 weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
-# Initial joint configuration guess
-start_pose_deg = [0.3,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
-q_start_prismatic = start_pose_deg[0]
-q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2–7) to radians
-q0 = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
 
 # --- Parameters ---
 quaternions = []
@@ -609,38 +605,31 @@ np.savetxt(matlab + "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f
 #  COLLISION CHECK   #
 #--------------------#
 
-joint_indices = list(range(num_joints))
-collision_penalty = 0
-for waypoints, joint_positions in enumerate(allConfigTraj):
-    # Set joint positions (robot, joint(i), theta)
-    for joint_index, joint_value in zip(joint_indices, joint_positions):
+# Get joint indices
+num_joints = p.getNumJoints(robotId)
+
+# Only actuated joints
+joint_indices = [i for i in range(num_joints) if p.getJointInfo(robotId, i)[2] != p.JOINT_FIXED]
+real_self_collision = False
+
+for waypoint_idx, waypoint_joints in enumerate(allConfigTraj):
+    for joint_index, joint_value in zip(joint_indices, waypoint_joints):
         p.resetJointState(robotId, joint_index, joint_value)
 
     bc.stepSimulation()
-    # --- Environment collision ---
+
     contacts_env = bc.getClosestPoints(robotId, obstacleId, distance=0.001)
+    if contacts_env:
+        print(f"Environment Collision at waypoint {waypoint_idx}")
 
-    # --- Self collision ---
     contacts_self_raw = bc.getClosestPoints(robotId, robotId, distance=0.001)
-
-    # Remove trivial contacts (same link pairs)
-    contacts_self = []
     unique_pairs = set()
-    ee_link = 7
     for c in contacts_self_raw:
-        linkA = c[3]
-        linkB = c[4]
-        distance = c[8]
+        linkA, linkB, distance = c[3], c[4], c[8]
 
-        # Only consider real penetration
-        if distance >= -1e-5:
+        if distance >= -1e-5 or linkA == linkB:
             continue
 
-        # Ignore same link
-        if linkA == linkB:
-            continue
-
-        # Ignore adjacent (parent-child)
         parentA = p.getJointInfo(robotId, linkA)[16] if linkA != -1 else -1
         parentB = p.getJointInfo(robotId, linkB)[16] if linkB != -1 else -1
 
@@ -648,14 +637,10 @@ for waypoints, joint_positions in enumerate(allConfigTraj):
             continue
 
         pair = tuple(sorted((linkA, linkB)))
-
         if pair not in unique_pairs:
             unique_pairs.add(pair)
-
-            print(f"Self collision between link {linkA} and link {linkB} at waypoint {waypoints}")
+            print(f"Self collision between link {linkA + 1} and link {linkB + 1} at waypoint {waypoint_idx}")
             real_self_collision = True
-    if contacts_env:
-        print(f"Environment Collision at waypoint {waypoints}")
 
 with open(matlab+"planning_time_sampling.txt", "a") as file:
     file.write(f"{planning_time}\n")
@@ -668,15 +653,15 @@ with open(matlab+"execution_time_sampling.txt", "a") as file:
 
 
 end_pose = allConfigTraj[-1,:]
-FK = robot.fkine(end_pose)
-end_position = FK.t
+FK_end = robot.fkine(end_pose)
+end_position = FK_end.t
 error = np.linalg.norm(goal_position-end_position)
 
 with open(matlab+"error_position_sampling.txt", "a") as file:
     file.write(f"{error}\n")
 
 # Convert measured rotation to quaternion
-R_meas = FK.R
+R_meas = FK_end.R
 q_meas = R.from_matrix(R_meas).as_quat()  # [x, y, z, w]
 
 # Quaternion difference

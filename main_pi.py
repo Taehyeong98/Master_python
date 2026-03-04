@@ -93,27 +93,16 @@ def validityChecker(state):
     # Extract SE3 state
     s = state  # already SE3 state in Python
     pos = np.array([s.getX(), s.getY(), s.getZ()])
-    INITIAL_RADIUS = 0.3
     GOAL = 0.1
     # ------------- 2️⃣ Move robot (sphere) -------------
     tf = fcl.Transform(np.eye(3), pos)
     path_point.setTransform(tf)
 
     inGoalRegion = np.linalg.norm(pos - goalPos) < GOAL_RADIUS
-    InitialRegion = np.linalg.norm(pos - startPos) < INITIAL_RADIUS
     if np.linalg.norm(pos - goalPos) < GOAL:
         return True
 
-    if InitialRegion:
-        req = fcl.CollisionRequest()
-        res = fcl.CollisionResult()
-        fcl.collide(path_point, obj, req, res)
-        # fcl.collide(path_point, s1_obj, req, res)
-        # fcl.collide(path_point, s2_obj, req, res)
-        # fcl.collide(path_point, s3_obj, req, res)
-        # fcl.collide(path_point, s4_obj, req, res)
-        if res.is_collision:
-            return False
+
     # ------------- 3️⃣ Ground collision (always obstacle) -------------
     if not inGoalRegion:
         req = fcl.CollisionRequest()
@@ -304,10 +293,19 @@ blockCenter = np.array([
 tf_box = fcl.Transform(np.eye(3), blockCenter)
 groundBlock.setTransform(tf_box)
 
+#--------------------#
+#     ROBOT URDF     #
+#--------------------#
+# Load URDF of Robot
+adress = "/home/pi/Desktop/Master_python/"
+robot = rtb.Robot.URDF( adress+"imed_robot_pi.urdf")
+
+print("robot urdf initialized")
+
 # --------------------#
 #    Path Planner    #
 # --------------------#
-point_r = 0.1
+point_r = 0.06
 point_shape = fcl.Sphere(point_r)
 path_point = fcl.CollisionObject(point_shape)
 
@@ -332,7 +330,15 @@ si = ob.SpaceInformation(space)
 start = ob.State(space)
 goal = ob.State(space)
 
-start().setXYZ(0.36860002, 0.24499995, 0.51539998)
+start_pose_deg = [0.2,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
+q_start_prismatic = start_pose_deg[0]
+q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2–7) to radians
+q0 = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
+
+FK_start = robot.fkine (q0)
+start_position = FK_start.t
+start().setXYZ(start_position[0], start_position[1], start_position[2])
+
 
 goal_position = [1.4, 0.3117, 0.37]
 goal().setXYZ(goal_position[0], goal_position[1], goal_position[2])
@@ -481,10 +487,6 @@ obstacleId = bc.createMultiBody(baseMass=0,
                                 basePosition=position,
                                 baseOrientation=orientation)
 
-# Load URDF of Robot
-adress = "/home/pi/Desktop/Master_python/"
-robot = rtb.Robot.URDF( adress+"imed_robot_pi.urdf")
-
 # Load Path
 path_data = np.loadtxt('path3d.csv', delimiter=",")
 
@@ -606,7 +608,7 @@ print("Waypoints:", len(allConfigTraj))
 # Get joint indices
 num_joints = p.getNumJoints(robotId)
 
-# Only actuated joints
+# Only actuated joints (remove base coordinate joint == 0)
 joint_indices = [i for i in range(num_joints) if p.getJointInfo(robotId, i)[2] != p.JOINT_FIXED]
 real_self_collision = False
 
