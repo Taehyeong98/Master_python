@@ -134,7 +134,6 @@ park_pose_rad = linear_movement[linear_time-1,:]
 traj = jtraj(park_pose_rad, goal_pose_q, 500)
 
 trajectory  = np.concatenate((linear_movement,traj.q))
-#trajectory = traj.q
 
 np.savetxt( "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
 
@@ -143,13 +142,10 @@ np.savetxt( "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
 # --------------------#
 
 # Get joint indices
-waypoints = trajectory.shape[0]
-joint_positions = trajectory.shape[1]
 num_joints = p.getNumJoints(robotId)
 joint_indices = list(range(num_joints))
-collision_penalty = 0
-
-for waypoints, joint_positions in enumerate(allConfigTraj):
+print(joint_indices)
+for waypoints, joint_positions in enumerate(trajectory):
     # Set joint positions (robot, joint(i), theta)
     for joint_index, joint_value in zip(joint_indices, joint_positions):
         p.resetJointState(robotId, joint_index, joint_value)
