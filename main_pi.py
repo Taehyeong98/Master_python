@@ -389,7 +389,7 @@ planner = og.RRTstar(si)
 planner.setProblemDefinition(pdef)
 planner.setup()
 
-solved = planner.solve(ob.timedPlannerTerminationCondition(20.0))
+solved = planner.solve(ob.timedPlannerTerminationCondition(7.0))
 
 if solved:
 
@@ -688,10 +688,10 @@ theta_err = r_err.magnitude()
 theta_err_deg = np.degrees(theta_err)
 
 print("Orientation error (deg):", theta_err_deg)
-
+print ("got it 1")
 with open( "error_orientation_sampling.txt", "a") as file:
     file.write(f"{theta_err_deg}\n")
-
+print ("got it 2")
 """
 while penalty > 10:
     print("replanning...")
