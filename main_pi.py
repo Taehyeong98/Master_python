@@ -602,41 +602,32 @@ np.savetxt( "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
 #  COLLISION CHECK   #
 # --------------------#
 
+print("Waypoints:", len(allConfigTraj))
 # Get joint indices
-waypoints = allConfigTraj.shape[0]
-joint_positions = allConfigTraj.shape[1]
-joint_indices = list(range(num_joints))
-collision_penalty = 0
-for waypoints, joint_positions in enumerate(allConfigTraj):
-    # Set joint positions (robot, joint(i), theta)
-    for joint_index, joint_value in zip(joint_indices, joint_positions):
+num_joints = p.getNumJoints(robotId)
+
+# Only actuated joints
+joint_indices = [i for i in range(num_joints) if p.getJointInfo(robotId, i)[2] != p.JOINT_FIXED]
+real_self_collision = False
+
+for waypoint_idx, waypoint_joints in enumerate(trajectory):
+    for joint_index, joint_value in zip(joint_indices, waypoint_joints):
         p.resetJointState(robotId, joint_index, joint_value)
 
     bc.stepSimulation()
-    # --- Environment collision ---
+
     contacts_env = bc.getClosestPoints(robotId, obstacleId, distance=0.001)
+    if contacts_env:
+        print(f"Environment Collision at waypoint {waypoint_idx}")
 
-    # --- Self collision ---
     contacts_self_raw = bc.getClosestPoints(robotId, robotId, distance=0.001)
-
-    # Remove trivial contacts (same link pairs)
-    contacts_self = []
     unique_pairs = set()
-    ee_link = 7
     for c in contacts_self_raw:
-        linkA = c[3]
-        linkB = c[4]
-        distance = c[8]
+        linkA, linkB, distance = c[3], c[4], c[8]
 
-        # Only consider real penetration
-        if distance >= -1e-5:
+        if distance >= -1e-5 or linkA == linkB:
             continue
 
-        # Ignore same link
-        if linkA == linkB:
-            continue
-
-        # Ignore adjacent (parent-child)
         parentA = p.getJointInfo(robotId, linkA)[16] if linkA != -1 else -1
         parentB = p.getJointInfo(robotId, linkB)[16] if linkB != -1 else -1
 
@@ -644,14 +635,10 @@ for waypoints, joint_positions in enumerate(allConfigTraj):
             continue
 
         pair = tuple(sorted((linkA, linkB)))
-
         if pair not in unique_pairs:
             unique_pairs.add(pair)
-
-            print(f"Self collision between link {linkA} and link {linkB} at waypoint {waypoints}")
+            print(f"Self collision between link {linkA + 1} and link {linkB + 1} at waypoint {waypoint_idx}")
             real_self_collision = True
-    if contacts_env:
-        print(f"Environment Collision at waypoint {waypoints}")
 
 with open( "planning_time_sampling.txt", "a") as file:
     file.write(f"{planning_time}\n")
