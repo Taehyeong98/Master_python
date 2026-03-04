@@ -482,7 +482,7 @@ obstacleId = bc.createMultiBody(baseMass=0,
                                 baseOrientation=orientation)
 
 # Load URDF of Robot
-robot = rtb.Robot.URDF( "imed_robot.urdf")
+robot = rtb.Robot.URDF( "imed_robot_pi.urdf")
 
 # Load Path
 path_data = np.loadtxt('path3d.csv', delimiter=",")
