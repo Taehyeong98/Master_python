@@ -193,17 +193,11 @@ start_time = time.time()
 #        STL         #
 # --------------------#
 # LOAD STL
-mesh = trimesh.load( 'voxel_alpha.stl')
+mesh = trimesh.load( 'voxel_alpha.stl', force='mesh')
 
-# Setting correct pose of STL
-# mesh.vertices *= 0.001
-"""
-T = np.eye(4)
-T[:3,:3] = R.from_rotvec(-np.pi/4 * np.array([1,0,0])).as_matrix()
-T[:3,3] = [0.35, 0.35, -0.55]
+if isinstance(mesh, trimesh.Scene):
+    mesh = mesh.dump(concatenate=True)
 
-mesh.apply_transform(T)
-"""
 V = np.array(mesh.vertices, dtype=np.float64)
 F = np.array(mesh.faces, dtype=np.int32)
 
