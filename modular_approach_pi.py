@@ -21,7 +21,6 @@ import io
 import sys
 from roboticstoolbox import jtraj
 import fcl
-#import qpsolvers
 import time
 
 start_time = time.time()
@@ -175,7 +174,7 @@ for waypoint_idx, waypoint_joints in enumerate(trajectory):
         pair = tuple(sorted((linkA, linkB)))
         if pair not in unique_pairs:
             unique_pairs.add(pair)
-            print(f"Self collision between link {linkA} and link {linkB} at waypoint {waypoint_idx}")
+            print(f"Self collision between link {linkA+1} and link {linkB+1} at waypoint {waypoint_idx}")
             real_self_collision = True
             
 end = time.time()
