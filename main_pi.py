@@ -508,7 +508,7 @@ posTraj = path_data[:, 0:3]
 # --- Quaternion interpolation ---
 # MATLAB: quaternion(w,x,y,z)
 # Python: scipy Rotation.from_quat expects (x, y, z, w)
-quaternions = []
+
 for j in range(waypoints):
     # Convert MATLAB [w,x,y,z] to Python [x,y,z,w]
     w, x, y, z = path_data[j, 6], path_data[j, 3], path_data[j, 4], path_data[j, 5]
