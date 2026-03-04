@@ -587,14 +587,6 @@ deltaJointDeg = np.rad2deg(deltaJointRad)
 absDeltaJointDeg = np.abs(deltaJointDeg)
 
 #--------------------#
-#    FINE TUNING     #
-#--------------------#
-
-#qdmax = np.ones(configTraj.shape[1]) * 1.0   # 1 rad/s for each joint
-#traj = mstraj(configTraj, dt=0.1, tacc=0.3, qdmax=qdmax)
-#allConfigTraj = traj.q
-
-#--------------------#
 #    Cubic Spline    #
 #--------------------#
 # Create array to store smooth trajectory
@@ -602,7 +594,6 @@ t_waypoints = np.arange(waypoints)  # 0,1,2,...,waypoints-1
 num_samples = waypoints*5  # number of points in final trajectory
 t_samples = np.linspace(0, waypoints-1, num_samples)
 num_joints = configTraj.shape[1]
-print(num_joints)
 allConfigTraj = np.zeros((num_samples, num_joints))
 
 # Interpolate each joint separately

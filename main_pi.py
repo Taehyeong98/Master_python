@@ -502,8 +502,6 @@ q_start_revolute = np.radians(start_pose_deg[1:7])  # Convert revolute joints (2
 q0 = np.concatenate(([q_start_prismatic], q_start_revolute))  # Combine back into one joint vector
 
 # --- Parameters ---
-
-allConfigTraj = []
 quaternions = []
 posTraj = path_data[:, 0:3]
 
@@ -581,9 +579,6 @@ deltaJointRad = np.diff(configTraj, axis=0)
 deltaJointDeg = np.rad2deg(deltaJointRad)
 absDeltaJointDeg = np.abs(deltaJointDeg)
 
-#qdmax = np.ones(configTraj.shape[1]) * 1.0   # 1 rad/s for each joint
-#traj = mstraj(configTraj, dt=0.1, tacc=0.3, qdmax=qdmax)
-#allConfigTraj = traj.q
 
 #--------------------#
 #    Cubic Spline    #
@@ -593,7 +588,6 @@ t_waypoints = np.arange(waypoints)  # 0,1,2,...,waypoints-1
 num_samples = waypoints*5  # number of points in final trajectory
 t_samples = np.linspace(0, waypoints-1, num_samples)
 num_joints = configTraj.shape[1]
-print(num_joints)
 allConfigTraj = np.zeros((num_samples, num_joints))
 
 # Interpolate each joint separately
