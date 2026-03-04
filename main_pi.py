@@ -482,7 +482,7 @@ obstacleId = bc.createMultiBody(baseMass=0,
                                 baseOrientation=orientation)
 
 # Load URDF of Robot
-adress = "/home/pi/Desktop/Master_python"
+adress = "/home/pi/Desktop/Master_python/"
 robot = rtb.Robot.URDF( adress+"imed_robot_pi.urdf")
 
 # Load Path
