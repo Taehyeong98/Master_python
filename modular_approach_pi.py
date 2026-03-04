@@ -139,7 +139,7 @@ np.savetxt( "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
 # --------------------#
 #  COLLISION CHECK   #
 # --------------------#
-
+print("Waypoints:", len(trajectory))
 # Get joint indices
 num_joints = p.getNumJoints(robotId)
 
