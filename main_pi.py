@@ -201,10 +201,14 @@ if isinstance(mesh, trimesh.Scene):
 V = np.array(mesh.vertices, dtype=np.float64)
 F = np.array(mesh.faces, dtype=np.int32)
 
+print("Vertices shape:", V.shape)
+print("Faces shape:", F.shape)
+
 model = fcl.BVHModel()
 model.beginModel(len(V), len(F))
 model.addSubModel(V, F)
 model.endModel()
+
 
 obj = fcl.CollisionObject(model)
 
