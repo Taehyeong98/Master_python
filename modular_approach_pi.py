@@ -146,10 +146,8 @@ num_joints = p.getNumJoints(robotId)
 
 # Only actuated joints
 joint_indices = [i for i in range(num_joints) if p.getJointInfo(robotId, i)[2] != p.JOINT_FIXED]
-print("Actuated joint indices:", joint_indices)
-
 real_self_collision = False
-
+"""
 for waypoint_idx, waypoint_joints in enumerate(trajectory):
     for joint_index, joint_value in zip(joint_indices, waypoint_joints):
         p.resetJointState(robotId, joint_index, joint_value)
@@ -211,6 +209,9 @@ print("Orientation error (deg):", theta_err_deg)
 
 with open("error_orientation_modular.txt", "a") as file:
     file.write(f"{theta_err_deg}\n")
+"""
+
+
 """
 #--------------------#
 #    GOAL REGION     #
