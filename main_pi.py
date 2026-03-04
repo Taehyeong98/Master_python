@@ -505,6 +505,7 @@ q0 = np.concatenate(([q_start_prismatic], q_start_revolute))  # Combine back int
 
 allConfigTraj = []
 quaternions = []
+posTraj = path_data[:, 0:3]
 
 # --- Quaternion interpolation ---
 # MATLAB: quaternion(w,x,y,z)
@@ -608,7 +609,6 @@ np.savetxt( "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
 # --------------------#
 
 # Get joint indices
-num_joints = p.getNumJoints(robotId)
 joint_indices = list(range(num_joints))
 collision_penalty = 0
 for waypoints, joint_positions in enumerate(allConfigTraj):
