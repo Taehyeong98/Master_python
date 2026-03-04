@@ -143,8 +143,16 @@ np.savetxt( "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
 
 # Get joint indices
 num_joints = p.getNumJoints(robotId)
-joint_indices = list(range(num_joints))
-print(joint_indices)
+
+joint_indices = []
+for i in range(p.getNumJoints(robotId)):
+    joint_info = p.getJointInfo(robotId, i)
+    joint_type = joint_info[2]  # 0: revolute, 1: prismatic, 2: spherical, 4: fixed
+    if joint_type != p.JOINT_FIXED:
+        joint_indices.append(i)
+
+print("Actuated joint indices:", joint_indices)
+
 for waypoints, joint_positions in enumerate(trajectory):
     # Set joint positions (robot, joint(i), theta)
     for joint_index, joint_value in zip(joint_indices, joint_positions):
