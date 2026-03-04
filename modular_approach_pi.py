@@ -34,7 +34,7 @@ bc = bullet_client.BulletClient(connection_mode=p.DIRECT)
 # Optional: set search path for meshes
 bc.setAdditionalSearchPath(pybullet_data.getDataPath())
 
-robotId=bc.loadURDF("imed_robot.urdf")
+robotId=bc.loadURDF("imed_robot_pi.urdf")
 position = [0.35, 0.35, -0.55]        # must be length 3
 # Axis-angle
 angle = -np.pi/4              # rotation angle in radians
