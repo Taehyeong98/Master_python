@@ -603,9 +603,11 @@ np.savetxt( "allConfigTraj.csv", allConfigTraj, delimiter=",", fmt="%.6f")
 # --------------------#
 
 # Get joint indices
+waypoints = allConfigTraj.shape[0]
+joint_positions = allConfigTraj.shape[1]
 joint_indices = list(range(num_joints))
 collision_penalty = 0
-for num_samples, joint_positions in enumerate(allConfigTraj):
+for waypoints, joint_positions in enumerate(allConfigTraj):
     # Set joint positions (robot, joint(i), theta)
     for joint_index, joint_value in zip(joint_indices, joint_positions):
         p.resetJointState(robotId, joint_index, joint_value)

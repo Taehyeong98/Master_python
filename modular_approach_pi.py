@@ -144,6 +144,7 @@ np.savetxt( "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
 
 # Get joint indices
 waypoints = trajectory.shape[0]
+joint_positions = trajectory.shape[1]
 num_joints = p.getNumJoints(robotId)
 joint_indices = list(range(num_joints))
 collision_penalty = 0
