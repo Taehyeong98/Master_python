@@ -610,7 +610,7 @@ num_joints = p.getNumJoints(robotId)
 joint_indices = [i for i in range(num_joints) if p.getJointInfo(robotId, i)[2] != p.JOINT_FIXED]
 real_self_collision = False
 
-for waypoint_idx, waypoint_joints in enumerate(trajectory):
+for waypoint_idx, waypoint_joints in enumerate(allConfigTraj):
     for joint_index, joint_value in zip(joint_indices, waypoint_joints):
         p.resetJointState(robotId, joint_index, joint_value)
 
