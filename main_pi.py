@@ -538,7 +538,7 @@ for i in range(waypoints):
         qIK = prevConfig.copy()
         J = robot.jacob0(qIK, endEffector)
         w = np.sqrt(np.linalg.det(J @ J.T))
-        penalty += 1
+        penalty = penalty + 1
     else:
         qIK = configNow.q
     robot.fkine(qIK)
