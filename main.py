@@ -340,7 +340,7 @@ FK_start = robot.fkine (q0)
 start_position = FK_start.t
 start().setXYZ(start_position[0], start_position[1], start_position[2])
 
-goal_position =[1.4, 0.3117, 0.37]
+goal_position =[1.8, 0.1, 0.1]
 goal().setXYZ(goal_position[0], goal_position[1], goal_position[2])
 
 # Equivalent of:
@@ -381,7 +381,7 @@ startPos = np.array([
     start().getZ()
 ])
 
-GOAL_RADIUS = 0.3
+GOAL_RADIUS = 0.4
 GOAL = 0.1
 treeReachedGoalRegion = {"value": False}  # mutable container
 
@@ -395,7 +395,7 @@ planner = og.RRTstar(si)
 planner.setProblemDefinition(pdef)
 planner.setup()
 
-solved = planner.solve(ob.timedPlannerTerminationCondition(7.0))
+solved = planner.solve(ob.timedPlannerTerminationCondition(12.0))
 
 if solved:
 
@@ -610,6 +610,7 @@ num_joints = p.getNumJoints(robotId)
 
 # Only actuated joints
 joint_indices = [i for i in range(num_joints) if p.getJointInfo(robotId, i)[2] != p.JOINT_FIXED]
+print(joint_indices)
 real_self_collision = False
 
 for waypoint_idx, waypoint_joints in enumerate(allConfigTraj):

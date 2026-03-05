@@ -497,11 +497,6 @@ endEffector = 'tool'  # name of end-effector link
 
 # Define weights for position (x,y,z) and orientation (roll, pitch, yaw)
 weights = np.array([0.5, 0.5, 0.5, 1, 1, 1])
-# Initial joint configuration guess
-start_pose_deg = [0.3, 90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
-q_start_prismatic = start_pose_deg[0]
-q_start_revolute = np.radians(start_pose_deg[1:7])  # Convert revolute joints (2–7) to radians
-q0 = np.concatenate(([q_start_prismatic], q_start_revolute))  # Combine back into one joint vector
 
 # --- Parameters ---
 quaternions = []
