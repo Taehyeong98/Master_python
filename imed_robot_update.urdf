@@ -13,14 +13,20 @@
             <inertia ixx="1.00000000" ixy="0.00000000" ixz="0.00000000" iyy="1.00000000" iyz="0.00000000" izz="1.00000000"/>
         </inertial>
         <visual>
-            <origin rpy="3.14159265 0.00000000 0.00000000" xyz="0.00000000 0.00000000 0.170000"/>
+            <origin rpy="3.14159265 0.00000000 0.00000000" xyz="0.00000000 0.00000000 0.13860000"/>
             <geometry>
-                <mesh filename="/Users/kim/Documents/MATLAB/New Folder/path_planning/Basis_V5_scaled.stl" scale="1.00000000 1.00000000 1.00000000"/>
+                <mesh filename="Basis_V5_scaled.stl" scale="1.0000000 1.0000000 1.000000"/>
             </geometry>
             <material name="">
                 <color rgba="0.50000000 0.50000000 0.50000000 1.00000000"/>
             </material>
         </visual>
+        <collision>
+            <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000 0.00000000 0.50000000"/>
+            <geometry>
+                <mesh filename="Basis_V5_scaled.stl" scale="1.00000000 1.0000000 1.0000000"/>
+            </geometry>
+        </collision>
     </link>
     <link name="link1">
         <inertial>
@@ -163,7 +169,7 @@
         <visual>
             <origin rpy="-1.57079633  0.00000000  0.00000000" xyz="0.00000000  0.00000000 -0.11800000"/>
             <geometry>
-                <mesh filename="/Users/kim/Documents/MATLAB/New Folder/path_planning/SIEM_Spritze.stl" scale="0.001000000 0.001000000 0.001000000"/>
+                <mesh filename="SIEM_Spritze.stl" scale="0.001000000 0.001000000 0.001000000"/>
             </geometry>
             <material name="">
                 <color rgba="0.50000000 0.50000000 0.50000000 1.00000000"/>
