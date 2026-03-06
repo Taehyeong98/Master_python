@@ -684,7 +684,7 @@ if initial_region is False:
     park_pose_rad = linear_movement[linear_time-1,:]
 
     traj = jtraj(park_pose_rad, goal_pose_q, 500)
-    if start_traj is not None:
+    if start_traj_size >0:
         trajectory  = np.concatenate((reversed_traj,linear_movement,traj.q))
     else:
         trajectory  = np.concatenate((allConfigTraj_start,linear_movement,traj.q))
