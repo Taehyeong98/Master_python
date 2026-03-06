@@ -131,8 +131,6 @@ if initial_region:
 
 start_traj = np.loadtxt('goaltrajectory.txt', delimiter=",")
 
-print(start_traj.size)
-"""
 if start_traj.size()>0 and initial_skip is False:
     reversed_traj = start_traj[::-1]
 
@@ -754,7 +752,7 @@ np.savetxt( "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
 trajectory[:,0] = trajectory[:,0]*1000
 trajectory[:,1:7] = trajectory[:,1:7]*180/np.pi
 np.savetxt( "modular_normal.txt", trajectory, delimiter=" ", fmt="%.2f")
-"""
+
 
 
 
