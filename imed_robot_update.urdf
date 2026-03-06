@@ -15,7 +15,7 @@
         <visual>
             <origin rpy="3.14159265 0.00000000 0.00000000" xyz="0.00000000 0.00000000 0.13860000"/>
             <geometry>
-                <mesh filename="Basis_V5_scaled.stl" scale="1.0000000 1.0000000 1.000000"/>
+                <mesh filename="Basis_V5_scaled.stl" scale="0.00100000 0.00100000 0.0010000"/>
             </geometry>
             <material name="">
                 <color rgba="0.50000000 0.50000000 0.50000000 1.00000000"/>
@@ -24,7 +24,7 @@
         <collision>
             <origin rpy="0.00000000 0.00000000 0.00000000" xyz="0.00000000 0.00000000 0.50000000"/>
             <geometry>
-                <mesh filename="Basis_V5_scaled.stl" scale="1.00000000 1.0000000 1.0000000"/>
+                <mesh filename="Basis_V5_scaled.stl" scale="0.001000000 0.00100000 0.00100000"/>
             </geometry>
         </collision>
     </link>
