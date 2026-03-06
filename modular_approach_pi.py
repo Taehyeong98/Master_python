@@ -292,7 +292,7 @@ if start_traj_size >0 and initial_skip is False and prev_goal_pose == q0:
     reversed_traj = start_traj[::-1]
 
 
-if start_traj_size == 0 and initial_skip is False and prev_goal_pose != q0:
+if initial_skip is False and prev_goal_pose != q0:
     print("the initial trajectory generation is started")
     # --------------------#
     #        STL         #
