@@ -20,6 +20,7 @@ import random
 import io
 import sys
 from roboticstoolbox import jtraj
+
 matlab = "/Users/kim/Documents/MATLAB/New Folder/path_planning/"
 import fcl
 import qpsolvers
@@ -35,7 +36,7 @@ bc = bullet_client.BulletClient(connection_mode=p.DIRECT)
 # Optional: set search path for meshes
 bc.setAdditionalSearchPath(pybullet_data.getDataPath())
 
-robotId=bc.loadURDF(matlab+"imed_robot.urdf")
+robotId=bc.loadURDF("imed_robot_update.urdf")
 position = [0.35, 0.35, -0.55]        # must be length 3
 # Axis-angle
 angle = -np.pi/4              # rotation angle in radians
@@ -66,7 +67,8 @@ obstacleId = bc.createMultiBody(baseMass=0,
 
 
 # Load URDF of Robot
-robot = rtb.Robot.URDF(matlab + "imed_robot.urdf")
+address ="/Users/kim/PycharmProjects/JupyterProject/"
+robot = rtb.Robot.URDF(address+"imed_robot_update.urdf")
 print("joint_limit",robot.qlim)
 endEffector = 'tool'  # name of end-effector link
 

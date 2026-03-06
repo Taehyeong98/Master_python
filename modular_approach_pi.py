@@ -64,8 +64,8 @@ obstacleId = bc.createMultiBody(baseMass=0,
 
 
 # Load URDF of Robot
-adress = "/home/pi/Desktop/Master_python/"
-robot = rtb.Robot.URDF( adress+"imed_robot_pi.urdf")
+address = "/home/pi/Desktop/Master_python/"
+robot = rtb.Robot.URDF( address+"imed_robot_update.urdf")
 endEffector = 'tool'  # name of end-effector link
 
 # Define weights for position (x,y,z) and orientation (roll, pitch, yaw)
