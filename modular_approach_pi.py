@@ -282,6 +282,9 @@ if initial_region:
     print("the goal is in initial region and the initial movement is skipped")
     initial_skip = True
 
+if np.allclose(q0[1:], park_pose_rad[1:]):
+    initial_skip = True
+
 start_traj = np.loadtxt('goaltrajectory.txt', delimiter=",")
 start_traj_size =start_traj.shape[0]
 
