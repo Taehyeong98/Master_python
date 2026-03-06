@@ -288,7 +288,7 @@ start_traj_size =start_traj.shape[0]
 prev_goal_pose = start_traj[-1,:]
 
 
-if start_traj_size >0 and initial_skip is False and prev_goal_pose == q0:
+if start_traj_size >0 and initial_skip is False and np.allclose(prev_goal_pose, q0):
     print("the initial trajectory is the previous goal trajectory")
     reversed_traj = start_traj[::-1]
 
