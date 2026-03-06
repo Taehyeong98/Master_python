@@ -125,7 +125,7 @@ start_position = FK_start.t
 
 initial_region = in_region(start_position, goal_pos, INITIAL_RADIUS)
 # check whether the goal pose is within the initial region
-inital_skip = False
+initial_skip = False
 if initial_region:
     initial_skip = True
 
