@@ -24,10 +24,10 @@ import fcl
 import time
 
 def in_region(start, point, radius):
-    sx, sy = start
-    x, y = point
+    sx, sy, sz = start
+    x, y, z = point
 
-    distance = math.sqrt((x - sx)**2 + (y - sy)**2)
+    distance = math.sqrt((x - sx)**2 + (y - sy)**2+(z - sz)**2)
     return distance <= radius
 
 start_time = time.time()
