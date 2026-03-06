@@ -130,12 +130,12 @@ if initial_region:
     initial_skip = True
 
 start_traj = np.loadtxt('goaltrajectory.txt', delimiter=",")
-
-if start_traj.size()>0 and initial_skip is False:
+start_traj_size =start_traj.size()
+if start_traj_size >0 and initial_skip is False:
     reversed_traj = start_traj[::-1]
 
 
-if start_traj == 0 and initial_skip is False:
+if start_traj_size == 0 and initial_skip is False:
     # --------------------#
     #        STL         #
     # --------------------#
