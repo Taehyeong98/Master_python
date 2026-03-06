@@ -278,15 +278,22 @@ initial_region = in_region(start_position, goal_pos, INITIAL_RADIUS)
 # check whether the goal pose is within the initial region
 initial_skip = False
 if initial_region:
+    print("the goal is in initial region and the initial movement is skipped")
     initial_skip = True
 
 start_traj = np.loadtxt('goaltrajectory.txt', delimiter=",")
 start_traj_size =start_traj.shape[0]
-if start_traj_size >0 and initial_skip is False:
+
+prev_goal_pose = start_traj[-1,:]
+
+
+if start_traj_size >0 and initial_skip is False and prev_goal_pose == q0:
+    print("the initial trajectory is the previous goal trajectory")
     reversed_traj = start_traj[::-1]
 
 
-if start_traj_size == 0 and initial_skip is False:
+if start_traj_size == 0 and initial_skip is False and prev_goal_pose != q0:
+    print("the initial trajectory generation is started")
     # --------------------#
     #        STL         #
     # --------------------#
