@@ -286,14 +286,15 @@ start_traj = np.loadtxt('goaltrajectory.txt', delimiter=",")
 start_traj_size =start_traj.shape[0]
 
 prev_goal_pose = start_traj[-1,:]
-
+prev_check = False
 
 if start_traj_size >0 and initial_skip is False and np.allclose(prev_goal_pose, q0):
     print("the initial trajectory is the previous goal trajectory")
     reversed_traj = start_traj[::-1]
+    prev_check = True
 
 
-if initial_skip is False and prev_goal_pose != q0:
+if initial_skip is False and prev_check is False:
     print("the initial trajectory generation is started")
     # --------------------#
     #        STL         #
