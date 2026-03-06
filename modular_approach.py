@@ -80,7 +80,7 @@ q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2â
 start_pose_rad = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
 
 # park pose
-park_pose_deg = [0.7,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]
+park_pose_deg = [1.2,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]
 q_park_prismatic = park_pose_deg[0]
 q_park_revolute = np.radians(park_pose_deg[1:7])
 park_pose_rad = np.concatenate(([q_park_prismatic], q_park_revolute))
@@ -108,7 +108,7 @@ goal_pose_q = q_sol # 1x7
 #  Linear Movement   #
 #--------------------#
 allConfigTraj =[]
-linear_time = 30
+linear_time = 250
 linear_movement = np.zeros((linear_time,len(start_pose_rad)))
 linear_movement[0:] = start_pose_rad
 x_start = start_pose_rad[0]
@@ -145,39 +145,30 @@ np.savetxt(matlab + "allConfigTraj.csv", trajectory, delimiter=",", fmt="%.6f")
 
 # Get joint indices
 num_joints = p.getNumJoints(robotId)
-joint_indices = list(range(num_joints))
-collision_penalty = 0
+# Only actuated joints
+joint_indices = [i for i in range(num_joints) if p.getJointInfo(robotId, i)[2] != p.JOINT_FIXED]
+real_self_collision = False
 
-for waypoints, joint_positions in enumerate(allConfigTraj):
-    # Set joint positions (robot, joint(i), theta)
-    for joint_index, joint_value in zip(joint_indices, joint_positions):
+for waypoint_idx, waypoint_joints in enumerate(trajectory):
+    for joint_index, joint_value in zip(joint_indices, waypoint_joints):
         p.resetJointState(robotId, joint_index, joint_value)
 
     bc.stepSimulation()
-    # --- Environment collision ---
+
     contacts_env = bc.getClosestPoints(robotId, obstacleId, distance=0.001)
+    if contacts_env:
+        contact_distance = c[8]
+        print("Distance:", contact_distance)
+        print(f"Environment Collision at waypoint {waypoint_idx}")
 
-    # --- Self collision ---
     contacts_self_raw = bc.getClosestPoints(robotId, robotId, distance=0.001)
-
-    # Remove trivial contacts (same link pairs)
-    contacts_self = []
     unique_pairs = set()
-    ee_link = 7
     for c in contacts_self_raw:
-        linkA = c[3]
-        linkB = c[4]
-        distance = c[8]
+        linkA, linkB, distance = c[3], c[4], c[8]
 
-        # Only consider real penetration
-        if distance >= -1e-5:
+        if distance >= -1e-5 or linkA == linkB:
             continue
 
-        # Ignore same link
-        if linkA == linkB:
-            continue
-
-        # Ignore adjacent (parent-child)
         parentA = p.getJointInfo(robotId, linkA)[16] if linkA != -1 else -1
         parentB = p.getJointInfo(robotId, linkB)[16] if linkB != -1 else -1
 
@@ -185,14 +176,11 @@ for waypoints, joint_positions in enumerate(allConfigTraj):
             continue
 
         pair = tuple(sorted((linkA, linkB)))
-
         if pair not in unique_pairs:
             unique_pairs.add(pair)
-
-            print(f"Self collision between link {linkA} and link {linkB} at waypoint {waypoints}")
+            print(f"Self collision between link {linkA+1} and link {linkB+1} at waypoint {waypoint_idx}")
             real_self_collision = True
-    if contacts_env:
-        print(f"Environment Collision at waypoint {waypoints}")
+
 
 end = time.time()
 print("Execution time:", end - start_time, "seconds")
