@@ -191,7 +191,9 @@ bc = bullet_client.BulletClient(connection_mode=p.DIRECT)
 # Optional: set search path for meshes
 bc.setAdditionalSearchPath(pybullet_data.getDataPath())
 
-robotId=bc.loadURDF("imed_robot_update.urdf")
+
+address = "/home/pi/Desktop/Master_python/"
+robotId=bc.loadURDF(address + "imed_robot_update.urdf")
 position = [0.35, 0.35, -0.55]        # must be length 3
 # Axis-angle
 angle = -np.pi/4              # rotation angle in radians
@@ -222,7 +224,6 @@ obstacleId = bc.createMultiBody(baseMass=0,
 
 
 # Load URDF of Robot
-address = "/home/pi/Desktop/Master_python/"
 robot = rtb.Robot.URDF( address+"imed_robot_update.urdf")
 endEffector = 'tool'  # name of end-effector link
 
