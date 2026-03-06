@@ -23,6 +23,157 @@ from roboticstoolbox import jtraj
 import fcl
 import time
 
+def mapToNearest(q_prev, q_new):
+    """
+    Map q_new to the nearest equivalent configuration relative to q_prev.
+
+    Parameters:
+        q_prev : array-like, previous joint configuration
+        q_new : array-like, new joint configuration
+
+    Returns:
+        q_mapped : np.ndarray, new configuration mapped closest to q_prev
+    """
+    q_prev = np.array(q_prev).flatten()
+    q_new = np.array(q_new).flatten()
+    q_mapped = q_prev.copy()
+
+    for i in range(len(q_new)):
+        if i == 0:
+            # linear joints: no wrapping
+            q_mapped[i] = q_new[i]
+
+
+        else:
+            # angle wrapping into [-pi, pi)
+            dq = q_new[i] - q_prev[i]
+            dq = (dq + np.pi) % (2 * np.pi) - np.pi
+            q_mapped[i] = q_prev[i] + dq
+
+    return q_mapped
+
+
+def singularity_gradient(q, body_name):
+    """
+    Compute the gradient of the manipulability measure to avoid singularities.
+
+    Parameters:
+        robot : roboticstoolbox Robot object
+        q : array-like, joint configuration
+        body_name : str, name of the end-effector link to compute Jacobian
+
+    Returns:
+        grad : np.ndarray, gradient of manipulability (size: robot.n)
+    """
+    q = np.array(q).flatten()
+    n_joints = robot.n
+    eps = 1e-6  # small increment for finite differences
+
+    # Compute Jacobian at current configuration
+    J = robot.jacob0(q, end=body_name)  # shape: 6 x n
+    w = np.sqrt(np.linalg.det(J @ J.T))
+
+    grad = np.zeros(n_joints)
+
+    for k in range(n_joints):
+        dq = np.zeros_like(q)
+        dq[k] = eps
+        J2 = robot.jacob0(q + dq, end=body_name)
+        w2 = np.sqrt(np.linalg.det(J2 @ J2.T))
+        grad[k] = (w2 - w) / eps
+
+    return grad
+
+
+def validityChecker(state):
+    # Extract SE3 state
+    s = state  # already SE3 state in Python
+    pos = np.array([s.getX(), s.getY(), s.getZ()])
+    GOAL = 0.1
+    # ------------- 2️⃣ Move robot (sphere) -------------
+    tf = fcl.Transform(np.eye(3), pos)
+    path_point.setTransform(tf)
+
+    inGoalRegion = np.linalg.norm(pos - goalPos) < GOAL_RADIUS
+    if np.linalg.norm(pos - goalPos) < GOAL:
+        return True
+
+
+    # ------------- 3️⃣ Ground collision (always obstacle) -------------
+    if not inGoalRegion:
+        req = fcl.CollisionRequest()
+        res = fcl.CollisionResult()
+        fcl.collide(path_point, groundBlock, req, res)
+
+        if res.is_collision:
+            return False
+
+    # ------------- 4️⃣ Patient collision (only inside goal region) -------------
+    if inGoalRegion:
+        req = fcl.CollisionRequest()
+        res = fcl.CollisionResult()
+        fcl.collide(path_point, obj, req, res)
+
+        if res.is_collision:
+            return False
+
+    return True
+
+
+class GoalRegionSampler(ob.StateSampler):
+
+    def __init__(self, space, goal, radius, reachedFlag):
+        super(GoalRegionSampler, self).__init__(space)
+        self.space = space
+        self.goal = np.array(goal)
+        self.radius = radius
+        self.reachedFlag = reachedFlag  # use mutable container like dict
+
+    # ----------------------------------
+    # sampleUniform
+    # ----------------------------------
+    def sampleUniform(self, state):
+
+        s = state  # already SE3 state in Python
+
+        if self.reachedFlag["value"]:
+
+            # Sample inside goal region
+            x = random.uniform(self.goal[0] - self.radius,
+                               self.goal[0] + self.radius)
+            y = random.uniform(self.goal[1] - self.radius,
+                               self.goal[1] + self.radius)
+            z = random.uniform(self.goal[2] - self.radius,
+                               self.goal[2] + self.radius)
+
+            s.setXYZ(x, y, z)
+
+            # Keep fixed orientation (identity quaternion)
+            s.rotation().x = 0.0
+            s.rotation().y = 0.0
+            s.rotation().z = 0.0
+            s.rotation().w = 1.0
+
+        else:
+            # Use default sampler
+            default_sampler = self.space.allocDefaultStateSampler()
+            default_sampler.sampleUniform(state)
+
+    # ----------------------------------
+    # Optional overrides
+    # ----------------------------------
+    def sampleUniformNear(self, state, near, distance):
+        pass
+
+    def sampleGaussian(self, state, mean, stdDev):
+        pass
+
+
+def samplerAllocator(space):
+    return GoalRegionSampler(space, goalPos, GOAL, treeReachedGoalRegion)
+
+
+
 def in_region(start, point, radius):
     sx, sy, sz = start
     x, y, z = point
