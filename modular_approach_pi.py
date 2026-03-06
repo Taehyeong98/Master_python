@@ -696,8 +696,10 @@ if initial_region is False:
     park_pose_rad = linear_movement[linear_time-1,:]
 
     traj = jtraj(park_pose_rad, goal_pose_q, 500)
-    if prev_check is True:
+    if prev_check is True and initial_skip is True:
         trajectory  = np.concatenate((reversed_traj,linear_movement,traj.q))
+    elif prev_check is False and initial_skip is True:
+        trajectory = np.concatenate((linear_movement,traj.q))
     else:
         trajectory  = np.concatenate((allConfigTraj_start,linear_movement,traj.q))
 
