@@ -26,7 +26,6 @@ import time
 import fcl
 
 
-
 def mapToNearest(q_prev, q_new):
     """
     Map q_new to the nearest equivalent configuration relative to q_prev.
@@ -90,38 +89,38 @@ def singularity_gradient(q, body_name):
 
 
 def validityChecker(state):
-    # Extract SE3 state
-    s = state  # already SE3 state in Python
-    pos = np.array([s.getX(), s.getY(), s.getZ()])
-    GOAL = 0.1
-    # ------------- 2️⃣ Move robot (sphere) -------------
+    pos = np.array([state.getX(), state.getY(), state.getZ()])
+
     tf = fcl.Transform(np.eye(3), pos)
     path_point.setTransform(tf)
 
-    inGoalRegion = np.linalg.norm(pos - goalPos) < GOAL_RADIUS
-    if np.linalg.norm(pos - goalPos) < GOAL:
+    dist_goal = np.linalg.norm(pos - goalPos)
+    dist_start = np.linalg.norm(pos - startPos)
+
+    inGoalRegion = dist_goal < GOAL_RADIUS
+    inInitialRegion = dist_start < INITIAL_RADIUS
+
+    # Goal reached
+    if dist_goal < GOAL:
         return True
 
-
-    # ------------- 3️⃣ Ground collision (always obstacle) -------------
-    if not inGoalRegion:
-        req = fcl.CollisionRequest()
-        res = fcl.CollisionResult()
-        fcl.collide(path_point, groundBlock, req, res)
-
-        if res.is_collision:
-            return False
-
-    # ------------- 4️⃣ Patient collision (only inside goal region) -------------
-    if inGoalRegion:
+    # Inside special regions → patient collision only
+    if inGoalRegion or inInitialRegion:
         req = fcl.CollisionRequest()
         res = fcl.CollisionResult()
         fcl.collide(path_point, obj, req, res)
-
         if res.is_collision:
             return False
+        return True
 
-    return True
+    # Outside regions → ground collision only
+    else:
+        req = fcl.CollisionRequest()
+        res = fcl.CollisionResult()
+        fcl.collide(path_point, groundBlock, req, res)
+        if res.is_collision:
+            return False
+        return True
 
 
 class GoalRegionSampler(ob.StateSampler):
@@ -297,7 +296,8 @@ groundBlock.setTransform(tf_box)
 #     ROBOT URDF     #
 #--------------------#
 # Load URDF of Robot
-adress = "/home/pi/Desktop/Master_python/"
+adress = "/Users/kim/PycharmProjects/JupyterProject/"
+#adress = "/home/pi/Desktop/Master_python/"
 robot = rtb.Robot.URDF( adress+"imed_robot_pi.urdf")
 
 print("robot urdf initialized")
@@ -305,7 +305,7 @@ print("robot urdf initialized")
 # --------------------#
 #    Path Planner    #
 # --------------------#
-point_r = 0.06
+point_r = 0.02
 point_shape = fcl.Sphere(point_r)
 path_point = fcl.CollisionObject(point_shape)
 
@@ -333,14 +333,16 @@ goal = ob.State(space)
 start_pose_deg = [0.2,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
 q_start_prismatic = start_pose_deg[0]
 q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2–7) to radians
-q0 = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
+#q0 = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
+
+q0 = [0.372251,1.220189,0.652652,-3.503907,0.988232,3.982409,2.729114]
 
 FK_start = robot.fkine (q0)
 start_position = FK_start.t
-start().setXYZ(start_position[0], start_position[1], start_position[2])
+start().setXYZ(start_position[0], start_position[1], start_position[2]+0.06)
 
 
-goal_position = [1.4, 0.3117, 0.37]
+goal_position = [2.126, 0.315, 0.33]
 goal().setXYZ(goal_position[0], goal_position[1], goal_position[2])
 
 # Equivalent of:
@@ -351,7 +353,7 @@ goal().setXYZ(goal_position[0], goal_position[1], goal_position[2])
 qx = R.from_rotvec(np.pi * np.array([1, 0, 0]))
 qy = R.from_rotvec((np.pi / 4) * np.array([0, 1, 0]))
 
-q = (qy * qx).as_quat()  # returns [x,y,z,w]
+q = (qx).as_quat()  # returns [x,y,z,w]
 # q = qx.as_quat()
 
 start().rotation().x = q[0]
@@ -381,7 +383,8 @@ startPos = np.array([
     start().getZ()
 ])
 
-GOAL_RADIUS = 0.3
+GOAL_RADIUS = 0.1
+INITIAL_RADIUS = 0.3
 GOAL = 0.1
 treeReachedGoalRegion = {"value": False}  # mutable container
 
@@ -448,6 +451,7 @@ if solved:
 
 else:
     print("No solution found.")
+    sys.exit(0)
 
 end_plan = time.time()
 planning_time = end_plan - start_plan
@@ -603,9 +607,8 @@ print("Waypoints:", len(allConfigTraj))
 # Get joint indices
 num_joints = p.getNumJoints(robotId)
 
-# Only actuated joints (remove base coordinate joint == 0)
+# Only actuated joints
 joint_indices = [i for i in range(num_joints) if p.getJointInfo(robotId, i)[2] != p.JOINT_FIXED]
-real_self_collision = False
 
 for waypoint_idx, waypoint_joints in enumerate(allConfigTraj):
     for joint_index, joint_value in zip(joint_indices, waypoint_joints):
@@ -614,8 +617,10 @@ for waypoint_idx, waypoint_joints in enumerate(allConfigTraj):
     bc.stepSimulation()
 
     contacts_env = bc.getClosestPoints(robotId, obstacleId, distance=0.001)
-    if contacts_env:
-        print(f"Environment Collision at waypoint {waypoint_idx}")
+    for contact in contacts_env:
+        if contact[8] < 0:  # penetration
+            print(f"Collision at waypoint {waypoint_idx}{contact[8]}")
+            initial_collision_check = False
 
     contacts_self_raw = bc.getClosestPoints(robotId, robotId, distance=0.001)
     unique_pairs = set()
@@ -623,6 +628,9 @@ for waypoint_idx, waypoint_joints in enumerate(allConfigTraj):
         linkA, linkB, distance = c[3], c[4], c[8]
 
         if distance >= -1e-5 or linkA == linkB:
+            continue
+
+        if {linkA, linkB} == {3, 5} or {linkA, linkB} == {4, 6}:
             continue
 
         parentA = p.getJointInfo(robotId, linkA)[16] if linkA != -1 else -1
@@ -634,8 +642,9 @@ for waypoint_idx, waypoint_joints in enumerate(allConfigTraj):
         pair = tuple(sorted((linkA, linkB)))
         if pair not in unique_pairs:
             unique_pairs.add(pair)
-            print(f"Self collision between link {linkA + 1} and link {linkB + 1} at waypoint {waypoint_idx}")
+            print(f"Self collision between link {linkA+1} and link {linkB+1} at waypoint {waypoint_idx}")
             real_self_collision = True
+
 
 with open( "planning_time_sampling.txt", "a") as file:
     file.write(f"{planning_time}\n")

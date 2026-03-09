@@ -510,7 +510,7 @@ if initial_check is False and startpose_check is False and reverse_check is Fals
 
         park_pose_x = start_position[0]
         # PARK POSE #
-        goal().setXYZ(park_pose_x, 0.2638, 0.4521)
+        goal().setXYZ(park_pose_x, 0.4, 0.5)
 
         q = (0.7071, -0.7071, 0, 0)  # returns [x,y,z,w]
 
