@@ -25,7 +25,6 @@ import time
 # FCL
 import fcl
 
-from modular_approach_pi_mulitple_waypoints import allConfigTraj
 
 
 def mapToNearest(q_prev, q_new):
@@ -177,75 +176,97 @@ class GoalRegionSampler(ob.StateSampler):
 def samplerAllocator(space):
     return GoalRegionSampler(space, goalPos, GOAL, treeReachedGoalRegion)
 
-waypoints_input_string = input("Number of waypoints: ")
-waypoints_input = int(waypoints_input_string)
-allConfigTraj_multiple = []
+# --------------------#
+#      Pybullet      #
+# --------------------#
+# Connect to GUI
+bc = bullet_client.BulletClient(connection_mode=p.DIRECT)
+
+# Optional: set search path for meshes
+bc.setAdditionalSearchPath(pybullet_data.getDataPath())
+
+waypoints_input = int(input("Number of waypoints: "))
+all_trajectories =[]
 
 for i in range(waypoints_input-1):
 
+    if i == 0:
+        start_pose_deg = list(map(float, input("Start pose in degrees: ").split()))
+        goal_pose_input = list(map(float, input("Next Goal position (x y z qx qy qz): ").split()))
+        q_start_prismatic = start_pose_deg[0]
+        q_start_revolute = np.radians(start_pose_deg[1:7])  # Convert revolute joints (2–7) to radians
+        start_pose_rad = np.concatenate(([q_start_prismatic], q_start_revolute))  # Combine back into one joint vector
 
-    start_time = time.time()
-    # --------------------#
-    #        STL         #
-    # --------------------#
-    # LOAD STL
-    mesh = trimesh.load( 'voxel_alpha.stl', force='mesh')
+        start_time = time.time()
+        # --------------------#
+        #        STL         #
+        # --------------------#
+        # LOAD STL
+        mesh = trimesh.load('voxel_alpha.stl', force='mesh')
 
-    if isinstance(mesh, trimesh.Scene):
-        mesh = mesh.dump(concatenate=True)
+        if isinstance(mesh, trimesh.Scene):
+            mesh = mesh.dump(concatenate=True)
 
-    V = np.array(mesh.vertices, dtype=np.float64)
-    F = np.array(mesh.faces, dtype=np.int32)
+        V = np.array(mesh.vertices, dtype=np.float64)
+        F = np.array(mesh.faces, dtype=np.int32)
 
-    print("Vertices shape:", V.shape)
-    print("Faces shape:", F.shape)
+        print("Vertices shape:", V.shape)
+        print("Faces shape:", F.shape)
 
-    model = fcl.BVHModel()
-    model.beginModel(len(V), len(F))
-    model.addSubModel(V, F)
-    model.endModel()
+        model = fcl.BVHModel()
+        model.beginModel(len(V), len(F))
+        model.addSubModel(V, F)
+        model.endModel()
 
+        obj = fcl.CollisionObject(model)
 
-    obj = fcl.CollisionObject(model)
+        # Axis-angle rotation
+        axis = np.array([1.0, 0.0, 0.0])
+        axis = axis / np.linalg.norm(axis)
 
-    # Axis-angle rotation
-    axis = np.array([1.0, 0.0, 0.0])
-    axis = axis / np.linalg.norm(axis)
+        angle = -np.pi / 4
 
-    angle = -np.pi / 4
+        Rot = R.from_rotvec(axis * angle).as_matrix()
 
-    Rot = R.from_rotvec(axis * angle).as_matrix()
+        #  Translation
 
-    #  Translation
+        translation = np.array([0.35, 0.35, -0.55], dtype=np.float64)
 
-    translation = np.array([0.35, 0.35, -0.55], dtype=np.float64)
+        # Create FCL Transform
+        tf_mesh = fcl.Transform(Rot, translation)
 
-    # Create FCL Transform
-    tf_mesh = fcl.Transform(Rot, translation)
+        # Apply to collision object
+        obj.setTransform(tf_mesh)
+        # --------------------#
+        #        BOX         #
+        # --------------------#
+        V_world = (Rot @ V.T).T + translation  # apply R*v + t
 
-    # Apply to collision object
-    obj.setTransform(tf_mesh)
-    # --------------------#
-    #        BOX         #
-    # --------------------#
-    V_world = (Rot @ V.T).T + translation  # apply R*v + t
+        # Compute bounds
+        xMin = np.min(V_world[:, 0])
+        xMax = np.max(V_world[:, 0])
+        yMin = np.min(V_world[:, 1])
+        yMax = np.max(V_world[:, 1])
+        zMin = np.min(V_world[:, 2])
+        zMax = np.max(V_world[:, 2])
 
-    # Compute bounds
-    xMin = np.min(V_world[:, 0])
-    xMax = np.max(V_world[:, 0])
-    yMin = np.min(V_world[:, 1])
-    yMax = np.max(V_world[:, 1])
-    zMin = np.min(V_world[:, 2])
-    zMax = np.max(V_world[:, 2])
+        # Compute block dimensions
+        blockHeight = max(0.0, zMax)
+        blockLength = xMax - xMin
+        blockWidth = yMax - yMin
 
-    # Compute block dimensions
-    blockHeight = max(0.0, zMax)
-    blockLength = xMax - xMin
-    blockWidth = yMax - yMin
+        print("The height is", blockHeight)
+        print("The length is", blockLength)
+        print("The width is", blockWidth)
 
-    print("The height is", blockHeight)
-    print("The length is", blockLength)
-    print("The width is", blockWidth)
+    else:
+        load_allConfigTraj = np.loadtxt('allConfigTraj.csv', delimiter=",")
+        start_pose_rad = load_allConfigTraj[-1]
+        print(start_pose_rad)
+        goal_pose_input = list(map(float, input("Next Goal position (x y z qx qy qz): ").split()))
+
+        start_time = time.time()
+
 
     # Optional margin
     # margin = 0.05
@@ -338,31 +359,16 @@ for i in range(waypoints_input-1):
     start = ob.State(space)
     goal = ob.State(space)
 
-    start_pose_deg = [0.2,90.0, 90.0, -90.0, 0.0, -90.0, 0.0]  # Python list or numpy array
-    q_start_prismatic = start_pose_deg[0]
-    q_start_revolute = np.radians(start_pose_deg[1:7]) # Convert revolute joints (2–7) to radians
-    #q0 = np.concatenate(([q_start_prismatic], q_start_revolute)) # Combine back into one joint vector
-
-    q0 = [0.372251,1.220189,0.652652,-3.503907,0.988232,3.982409,2.729114]
-
-    FK_start = robot.fkine (q0)
+    FK_start = robot.fkine (start_pose_rad)
     start_position = FK_start.t
     start().setXYZ(start_position[0], start_position[1], start_position[2]+0.06)
+    goal_position= [goal_pose_input[0], goal_pose_input[1], goal_pose_input[2]]
+    goal().setXYZ(goal_pose_input[0], goal_pose_input[1], goal_pose_input[2])
 
-
-    goal_position = [2.126, 0.315, 0.33]
-    goal().setXYZ(goal_position[0], goal_position[1], goal_position[2])
-
-    # Equivalent of:
-    # qx = AngleAxis(pi, X)
-    # qy = AngleAxis(pi/4, Y)
-    # q = qy * qx
-
-    qx = R.from_rotvec(np.pi * np.array([1, 0, 0]))
-    qy = R.from_rotvec((np.pi / 4) * np.array([0, 1, 0]))
-
-    q = (qx).as_quat()  # returns [x,y,z,w]
-    # q = qx.as_quat()
+    qx = R.from_rotvec(np.deg2rad(goal_pose_input[3]) * np.array([1, 0, 0]))
+    qy = R.from_rotvec(np.deg2rad(goal_pose_input[4]) * np.array([0, 1, 0]))
+    qz = R.from_rotvec(np.deg2rad(goal_pose_input[5]) * np.array([0, 0, 1]))
+    q = (qx * qy * qz).as_quat()  # returns [x,y,z,w]
 
     start().rotation().x = q[0]
     start().rotation().y = q[1]
@@ -414,7 +420,7 @@ for i in range(waypoints_input-1):
         #       Get solution path
         # -----------------------------
         path = pdef.getSolutionPath()
-        path.interpolate(150)  # densify path
+        path.interpolate(50)  # densify path
 
         # -----------------------------
         #        Save path to CSV
@@ -464,14 +470,6 @@ for i in range(waypoints_input-1):
     end_plan = time.time()
     planning_time = end_plan - start_plan
     print("Planning time:", end_plan - start_plan)
-    # --------------------#
-    #      Pybullet      #
-    # --------------------#
-    # Connect to GUI
-    bc = bullet_client.BulletClient(connection_mode=p.DIRECT)
-
-    # Optional: set search path for meshes
-    bc.setAdditionalSearchPath(pybullet_data.getDataPath())
 
     robotId = bc.loadURDF( "imed_robot_pi.urdf")
     position = [0.35, 0.35, -0.55]  # must be length 3
@@ -525,12 +523,12 @@ for i in range(waypoints_input-1):
 
 
     # --- Initialize configuration ---
-    qStart = q0  # Python list or numpy array
+    qStart = start_pose_rad  # Python list or numpy array
     prevConfig = np.array(qStart)
     configTraj = np.zeros((waypoints, len(qStart)))
     velJointTraj = np.zeros((waypoints, len(qStart)))
     T_target = SE3()
-    qIK = q0
+    qIK = start_pose_rad
     penalty = 0
     # --- Main loop: IK + null-space optimization + smoothing ---
     for i in range(waypoints):
@@ -687,5 +685,6 @@ for i in range(waypoints_input-1):
     print("Orientation error (deg):", theta_err_deg)
     with open( "error_orientation_sampling.txt", "a") as file:
         file.write(f"{theta_err_deg}\n")
-    allConfigTraj_multiple= np.concatenate((allConfigTraj_multiple,allConfigTraj))
-np.savetxt( "allConfigTraj_multiple.csv", allConfigTraj_multiple, delimiter=",", fmt="%.6f")
+    all_trajectories.append(allConfigTraj)
+allConfigTraj_multiple = np.vstack(all_trajectories)
+np.savetxt("allConfigTraj_multiple.csv", allConfigTraj_multiple, delimiter=",", fmt="%.6f")

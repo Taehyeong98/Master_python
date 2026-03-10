@@ -892,5 +892,5 @@ for i in range(waypoints_input-1):
         file.write(f"{theta_err_deg}\n")
     all_trajectories.append(trajectory)
 allConfigTraj_multiple = np.vstack(all_trajectories)
-np.savetxt("allConfigTraj_multiple.csv", allConfigTraj_multiple, delimiter=",", fmt="%.6f")
+np.savetxt("allConfigTraj_multiple.txt", allConfigTraj_multiple, delimiter=",", fmt="%.6f")
 
