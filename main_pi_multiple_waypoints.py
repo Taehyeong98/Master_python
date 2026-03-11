@@ -349,7 +349,7 @@ for i in range(waypoints_input-1):
     bounds.setHigh(1, 0.85)
 
     bounds.setLow(2, 0.0)  # z-axis
-    bounds.setHigh(2, 0.62)  # original 0.84m
+    bounds.setHigh(2, 0.63)  # original 0.84m
 
     space.setBounds(bounds)
 
@@ -536,9 +536,15 @@ for i in range(waypoints_input-1):
         T_target.t = posTraj[i, :]
         qk = quaternions[i]
         T_target.R = qk.as_matrix()  # 3x3 rotation matrix
+
+        m = robot.manipulability(qIK)
+        if m < 0.01:
+            print("the trajectory is infeasible")
+            sys.exit(0)
+
         # Solve IK
         configNow = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
-                                   q0=qIK)  # replace with your Python IK function
+                                   q0=qIK, ilimit = 100)  # replace with your Python IK function
         # Handle IK failure
         if not configNow.success:
             print(f"Warning: IK failed at waypoint {i}, using previous config")
@@ -548,6 +554,7 @@ for i in range(waypoints_input-1):
             penalty = penalty + 1
         else:
             qIK = configNow.q
+
         robot.fkine(qIK)
         J = robot.jacob0(qIK, endEffector)
         N = np.eye(len(qIK)) - np.linalg.pinv(J) @ J
