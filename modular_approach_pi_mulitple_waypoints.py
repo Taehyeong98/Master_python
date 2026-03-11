@@ -267,6 +267,14 @@ for i in range(waypoints_input-1):
     q_park_revolute = np.radians(park_pose_end[1:7])
     park_pose_end_rad = np.concatenate(([q_park_prismatic], q_park_revolute))
 
+    FK_park_end = robot.fkine(park_pose_end_rad)
+    park_end_position = FK_park_end.t
+    quat_park_end = R.from_matrix(FK_park_end.R).as_quat()
+
+    park_pose_goal = [goal_pose_input[0],90.0, 90.0, -90.0, 0.0, -90.0, 0.0]
+    q_park_prismatic_goal = park_pose_goal[0]
+    q_park_revolute_goal = np.radians(park_pose_goal[1:7])
+    park_pose_goal_rad = np.concatenate(([q_park_prismatic_goal], q_park_revolute_goal))
     #--------------------#
     #  Initial Movement  #
     #--------------------#
@@ -289,32 +297,39 @@ for i in range(waypoints_input-1):
     first_try_check = False
     initial_collision_check = True
     goal_trajectory_check = True
-
+    STL_check = False
     #----------INITIAL CHECK----------#
     if initial_region:
         print("the goal is in initial region and the initial movement is skipped")
         initial_check = True
 
     #----------START POSE CHECK----------#
-    if np.allclose(start_pose_rad[1:], park_pose_end_rad[1:]):
+    if np.allclose (start_pose_rad[1:], park_pose_end_rad[1:], atol=1e-3):
         startpose_check = True
+        print("park pose trajectory is skipped")
+        park_pose_start = start_pose_rad
+
 
     start_traj = np.loadtxt('goaltrajectory.txt', delimiter=",")
     start_traj_size =start_traj.shape[0]
 
-    prev_goal_pose = start_traj[-1]
-    prev_park_pose = start_traj[0]
-    park_check_pose = [0,1.571,1.571,-1.571,0.000,-1.571,0.000]
+    print(start_traj_size)
+    park_check_pose = [0, 1.571, 1.571, -1.571, 0.000, -1.571, 0.000]
+    if start_traj_size > 0:
+        prev_goal_pose = start_traj[-1]
+        prev_park_pose = start_traj[0]
     #----------REVERSE POSSIBILITY CHECK----------#
-    if np.allclose(prev_goal_pose, start_pose_rad):
-        reverse_check= True
+        if np.allclose(prev_goal_pose, start_pose_rad,atol=1e-3):
+            reverse_check= True
+
 
     #----------PARK POSE CHECK----------#
-    if np.allclose(prev_park_pose[1:], park_check_pose[1:], atol=1e-3):
-        parkpose_check = True
-    else:
-        parkpose_check = False
+        if np.allclose(prev_park_pose[1:], park_check_pose[1:], atol=1e-3):
+            parkpose_check = True
+        else:
+            parkpose_check = False
 
+    print(reverse_check)
 
     if start_traj_size >0 and initial_check is False and startpose_check is False and reverse_check is True and parkpose_check is True:
         print("the initial trajectory is the previous goal trajectory")
@@ -323,7 +338,7 @@ for i in range(waypoints_input-1):
         park_pose_start = reversed_traj[-1]
 
 
-    if initial_collision_check is True:
+    if initial_check is True:
         solver = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
                                 q0=start_pose_rad)  # replace with your Python IK function
         counter = 0
@@ -340,18 +355,18 @@ for i in range(waypoints_input-1):
         goal_pose_q = q_sol  # 1x7
     else:
         solver = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
-                                q0=park_pose_end_rad)  # replace with your Python IK function
+                                q0=park_pose_goal_rad)  # replace with your Python IK function
         counter = 0
         while (solver.success == False):
             print("IK solver failed, try again")
             solver = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
-                                    q0=park_pose_end_rad)  # replace with your Python
+                                    q0=park_pose_goal_rad)  # replace with your Python
             counter = counter + 1
             if counter > 10:
                 print("GOAL POSITION is not reachable!!")
                 sys.exit()
         q_sol = solver.q
-        print(q_sol)
+        print("goal pose:",q_sol)
         goal_pose_q = q_sol  # 1x7
 
 
@@ -389,6 +404,7 @@ for i in range(waypoints_input-1):
 
         if first_try_check is True and initial_collision_check is False:
             print("the initial trajectory generation is started")
+            STL_check = True
             # --------------------#
             #        STL         #
             # --------------------#
@@ -515,7 +531,7 @@ for i in range(waypoints_input-1):
             # --------------------#
             #    Path Planner    #
             # --------------------#
-            point_r = 0.01
+            point_r = 0.005
             point_shape = fcl.Sphere(point_r)
             path_point = fcl.CollisionObject(point_shape)
 
@@ -799,7 +815,7 @@ for i in range(waypoints_input-1):
         # Only actuated joints
         joint_indices = [i for i in range(num_joints) if p.getJointInfo(robotId, i)[2] != p.JOINT_FIXED]
 
-        for waypoint_idx, waypoint_joints in enumerate(traj):
+        for waypoint_idx, waypoint_joints in enumerate(traj.q):
             for joint_index, joint_value in zip(joint_indices, waypoint_joints):
                 p.resetJointState(robotId, joint_index, joint_value)
 
@@ -850,6 +866,85 @@ for i in range(waypoints_input-1):
         else:
             print("Collision in the goal trajectory!!")
             print("Path Planner starts!!")
+
+            if STL_check is False:
+                # --------------------#
+                #        STL         #
+                # --------------------#
+                # LOAD STL
+                mesh = trimesh.load('voxel_alpha.stl', force='mesh')
+
+                if isinstance(mesh, trimesh.Scene):
+                    mesh = mesh.dump(concatenate=True)
+
+                V = np.array(mesh.vertices, dtype=np.float64)
+                F = np.array(mesh.faces, dtype=np.int32)
+
+                print("Vertices shape:", V.shape)
+                print("Faces shape:", F.shape)
+
+                model = fcl.BVHModel()
+                model.beginModel(len(V), len(F))
+                model.addSubModel(V, F)
+                model.endModel()
+
+                obj = fcl.CollisionObject(model)
+
+                # Axis-angle rotation
+                axis = np.array([1.0, 0.0, 0.0])
+                axis = axis / np.linalg.norm(axis)
+
+                angle = -np.pi / 4
+
+                Rot = R.from_rotvec(axis * angle).as_matrix()
+
+                #  Translation
+
+                translation = np.array([0.35, 0.35, -0.55], dtype=np.float64)
+
+                # Create FCL Transform
+                tf_mesh = fcl.Transform(Rot, translation)
+
+                # Apply to collision object
+                obj.setTransform(tf_mesh)
+                # --------------------#
+                #        BOX         #
+                # --------------------#
+                V_world = (Rot @ V.T).T + translation  # apply R*v + t
+
+                # Compute bounds
+                xMin = np.min(V_world[:, 0])
+                xMax = np.max(V_world[:, 0])
+                yMin = np.min(V_world[:, 1])
+                yMax = np.max(V_world[:, 1])
+                zMin = np.min(V_world[:, 2])
+                zMax = np.max(V_world[:, 2])
+
+                # Compute block dimensions
+                blockHeight = max(0.0, zMax)
+                blockLength = xMax - xMin
+                blockWidth = yMax - yMin
+
+                print("The height is", blockHeight)
+                print("The length is", blockLength)
+                print("The width is", blockWidth)
+
+            # --------------------#
+            #    Move FORWARDS    #
+            # --------------------#
+
+            move_forwards_rad =[park_pose_end_rad[0],2.227695,1.138400,-0.685912,0.964475,-1.300536,-0.367489]
+            find_pos_traj_gen = jtraj(park_pose_end_rad, move_forwards_rad, 100)
+            find_pos_traj = find_pos_traj_gen.q
+            find_pos_q = find_pos_traj[-1]
+            FK_park_to_find_pos = robot.fkine(find_pos_q)
+            find_pos_position = FK_park_to_find_pos.t
+            find_pos_quat = R.from_matrix(FK_park_to_find_pos.R).as_quat()
+
+
+
+
+
             # --------------------#
             #    Path Planner    #
             # --------------------#
@@ -878,18 +973,16 @@ for i in range(waypoints_input-1):
             start = ob.State(space)
             goal = ob.State(space)
 
-            start().setXYZ(start_position[0], start_position[1], start_position[2] + 0.06)
-
-            park_pose_x = start_position[0]
+            start().setXYZ(find_pos_position[0], find_pos_position[1], find_pos_position[2] + 0.06)
             # PARK POSE #
-            goal().setXYZ(park_pose_x, 0.4, 0.5)
+            goal().setXYZ(goal_pos[0], goal_pos[1], goal_pos[2])
 
-            q = (0.7071, -0.7071, 0, 0)  # returns [x,y,z,w]
+            q = goal_ori  # returns [x,y,z,w]
 
-            start().rotation().x = quat_start[0]
-            start().rotation().y = quat_start[1]
-            start().rotation().z = quat_start[2]
-            start().rotation().w = quat_start[3]
+            start().rotation().x = find_pos_quat[0]
+            start().rotation().y = find_pos_quat[1]
+            start().rotation().z = find_pos_quat[2]
+            start().rotation().w = find_pos_quat[3]
 
             goal().rotation().x = q[0]
             goal().rotation().y = q[1]
@@ -1011,12 +1104,12 @@ for i in range(waypoints_input-1):
 
             # --- Initialize configuration ---
 
-            qStart = start_pose_rad  # Python list or numpy array
+            qStart = find_pos_q  # Python list or numpy array
             prevConfig = np.array(qStart)
             configTraj = np.zeros((waypoints, len(qStart)))
             velJointTraj = np.zeros((waypoints, len(qStart)))
             T_target = SE3()
-            qIK = start_pose_rad
+            qIK = find_pos_q
             penalty = 0
             # --- Main loop: IK + null-space optimization + smoothing ---
             for i in range(waypoints):
@@ -1024,6 +1117,11 @@ for i in range(waypoints_input-1):
                 T_target.t = posTraj[i, :]
                 qk = quaternions[i]
                 T_target.R = qk.as_matrix()  # 3x3 rotation matrix
+
+                m = robot.manipulability(qIK)
+                if m < 0.01:
+                    print("the trajectory is infeasible")
+                    sys.exit(0)
                 # Solve IK
                 configNow = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
                                            q0=qIK)  # replace with your Python IK function
@@ -1088,18 +1186,22 @@ for i in range(waypoints_input-1):
                 cs = CubicSpline(t_waypoints, configTraj[:, j], bc_type='clamped')  # clamped ensures zero slope at ends
                 allConfigTraj_goal[:, j] = cs(t_samples)
 
+            find_pos_traj_end = find_pos_traj[-1]
+            allConfigTraj_goal_start = allConfigTraj_goal[0]
+            transition_traj_gen = jtraj(find_pos_traj_end, allConfigTraj_goal_start, 50)
+            transition_traj = transition_traj_gen.q
             if initial_check is False and startpose_check is False and reverse_check is True and parkpose_check is True:
-                trajectory  = np.concatenate((reversed_traj,linear_movement,allConfigTraj_goal))
+                trajectory  = np.concatenate((reversed_traj,linear_movement,find_pos_traj,transition_traj,allConfigTraj_goal))
             elif initial_check is False and startpose_check is True:
-                trajectory = np.concatenate((linear_movement,allConfigTraj_goal))
+                trajectory = np.concatenate((linear_movement,find_pos_traj,transition_traj,allConfigTraj_goal))
             else:
-                trajectory  = np.concatenate((allConfigTraj_start,linear_movement,allConfigTraj_goal))
+                trajectory  = np.concatenate((allConfigTraj_start,linear_movement,find_pos_traj,transition_traj,allConfigTraj_goal))
 
+            sampling_traj_goal = np.concatenate((find_pos_traj,transition_traj,allConfigTraj_goal))
 
+            np.savetxt("goaltrajectory.txt", sampling_traj_goal,delimiter=",", fmt="%.3f")
 
-        np.savetxt("goaltrajectory.txt", allConfigTraj_goal,delimiter=",", fmt="%.3f")
-
-        np.savetxt( "allConfigTraj.txt", trajectory, delimiter=",", fmt="%.3f")
+            np.savetxt( "allConfigTraj.txt", trajectory, delimiter=",", fmt="%.3f")
 
     else:
         trajectory_q = jtraj(start_pose_rad, goal_pose_q, 500)
