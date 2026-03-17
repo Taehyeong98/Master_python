@@ -23,6 +23,8 @@ from roboticstoolbox import jtraj
 import fcl
 import time
 
+from main_pi_multiple_waypoints import box3_obj, box4_obj
+
 
 def mapToNearest(q_prev, q_new):
     """
@@ -108,6 +110,9 @@ def validityChecker(state):
     req = fcl.CollisionRequest()
     res = fcl.CollisionResult()
     fcl.collide(path_point, obj, req, res)
+    fcl.collide(path_point, box3_obj, req, res)
+    fcl.collide(path_point, box4_obj, req, res)
+
     if res.is_collision:
         return False
     return True
