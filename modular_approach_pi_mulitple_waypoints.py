@@ -203,8 +203,8 @@ for i in range(waypoints_input-1):
 
     start_time = time.time()
 
-    #address = "/home/pi/Desktop/Master_python/"
-    address = "/Users/kim/PycharmProjects/JupyterProject/"
+    address = "/home/pi/Desktop/Master_python/"
+    #address = "/Users/kim/PycharmProjects/JupyterProject/"
     robotId=bc.loadURDF(address + "imed_robot_update.urdf")
     position = [0.55, 0.35, -0.55]        # must be length 3
     # Axis-angle
