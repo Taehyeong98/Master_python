@@ -20,6 +20,7 @@ import random
 import io
 import sys
 from roboticstoolbox import mstraj
+from roboticstoolbox import jtraj
 import time
 
 # FCL
@@ -267,6 +268,43 @@ for i in range(waypoints_input-1):
 
         start_time = time.time()
 
+    # check if start pose is park pose
+    parkpose_check = False
+
+    park_check_pose = [0, 1.571, 1.571, -1.571, 0.000, -1.571, 0.000]
+    # ----------PARK POSE CHECK----------#
+    if np.allclose(start_pose_rad[1:], park_check_pose[1:], atol=1e-3):
+        parkpose_check = True
+        print("Start Pose is equal to Parkpose")
+    else:
+        parkpose_check = False
+
+    # --------------------#
+    #     ROBOT URDF     #
+    # --------------------#
+    # Load URDF of Robot
+    #adress = "/Users/kim/PycharmProjects/JupyterProject/"
+    adress = "/home/pi/Desktop/Master_python/"
+    robot = rtb.Robot.URDF(adress + "imed_robot_pi.urdf")
+
+    print("robot urdf initialized")
+
+    # move little forward
+    if parkpose_check:
+        # --------------------#
+        #    Move FORWARDS    #
+        # --------------------#
+
+        move_forwards_rad = [start_pose_rad[0], 2.452, 1.768, -0.4, -0.514, 1.156, 0.752]
+        find_pos_traj_gen = jtraj(start_pose_rad, move_forwards_rad, 100)
+        find_pos_traj = find_pos_traj_gen.q
+        find_pos_q = find_pos_traj[-1]
+        FK_park_to_find_pos = robot.fkine(find_pos_q)
+        find_pos_position = FK_park_to_find_pos.t
+        find_pos_quat = R.from_matrix(FK_park_to_find_pos.R).as_quat()
+
+
+
 
     # Optional margin
     # margin = 0.05
@@ -377,15 +415,7 @@ for i in range(waypoints_input-1):
     tf_box = fcl.Transform(np.eye(3), blockCenter)
     groundBlock.setTransform(tf_box)
 
-    #--------------------#
-    #     ROBOT URDF     #
-    #--------------------#
-    # Load URDF of Robot
-    #adress = "/Users/kim/PycharmProjects/JupyterProject/"
-    adress = "/home/pi/Desktop/Master_python/"
-    robot = rtb.Robot.URDF( adress+"imed_robot_pi.urdf")
 
-    print("robot urdf initialized")
 
     # --------------------#
     #    Path Planner    #
@@ -415,21 +445,33 @@ for i in range(waypoints_input-1):
     start = ob.State(space)
     goal = ob.State(space)
 
-    FK_start = robot.fkine (start_pose_rad)
-    start_position = FK_start.t
-    start().setXYZ(start_position[0], start_position[1], start_position[2]+0.06)
-    goal_position= [goal_pose_input[0], goal_pose_input[1], goal_pose_input[2]]
-    goal().setXYZ(goal_pose_input[0], goal_pose_input[1], goal_pose_input[2])
-
     qx = R.from_rotvec(np.deg2rad(goal_pose_input[3]) * np.array([1, 0, 0]))
     qy = R.from_rotvec(np.deg2rad(goal_pose_input[4]) * np.array([0, 1, 0]))
     qz = R.from_rotvec(np.deg2rad(goal_pose_input[5]) * np.array([0, 0, 1]))
     q = (qx * qy * qz).as_quat()  # returns [x,y,z,w]
 
-    start().rotation().x = q[0]
-    start().rotation().y = q[1]
-    start().rotation().z = q[2]
-    start().rotation().w = q[3]
+    if parkpose_check:
+        start().setXYZ(find_pos_position[0], find_pos_position[1], find_pos_position[2] + 0.06)
+
+        start().rotation().x = find_pos_quat[0]
+        start().rotation().y = find_pos_quat[1]
+        start().rotation().z = find_pos_quat[2]
+        start().rotation().w = find_pos_quat[3]
+    else:
+
+        FK_start = robot.fkine(start_pose_rad)
+        start_position = FK_start.t
+        start().setXYZ(start_position[0], start_position[1], start_position[2] + 0.06)
+
+        start().rotation().x = q[0]
+        start().rotation().y = q[1]
+        start().rotation().z = q[2]
+        start().rotation().w = q[3]
+
+
+    goal_position= [goal_pose_input[0], goal_pose_input[1], goal_pose_input[2]]
+    goal().setXYZ(goal_pose_input[0], goal_pose_input[1], goal_pose_input[2])
+
 
     goal().rotation().x = q[0]
     goal().rotation().y = q[1]
@@ -556,6 +598,8 @@ for i in range(waypoints_input-1):
     # Load Path
     path_data = np.loadtxt('path3d.csv', delimiter=",")
 
+
+
     # Number of waypoints (rows)
     waypoints = path_data.shape[0]
 
@@ -577,14 +621,22 @@ for i in range(waypoints_input-1):
         w, x, y, z = path_data[j, 6], path_data[j, 3], path_data[j, 4], path_data[j, 5]
         quaternions.append(R.from_quat([x, y, z, w]))
 
+    if parkpose_check:
+        qStart = move_forwards_rad
+        prevConfig = np.array(qStart)
+        configTraj = np.zeros((waypoints, len(qStart)))
+        velJointTraj = np.zeros((waypoints, len(qStart)))
+        T_target = SE3()
+        qIK = move_forwards_rad
+    else:
+        # --- Initialize configuration ---
+        qStart = start_pose_rad  # Python list or numpy array
+        prevConfig = np.array(qStart)
+        configTraj = np.zeros((waypoints, len(qStart)))
+        velJointTraj = np.zeros((waypoints, len(qStart)))
+        T_target = SE3()
+        qIK = start_pose_rad
 
-    # --- Initialize configuration ---
-    qStart = start_pose_rad  # Python list or numpy array
-    prevConfig = np.array(qStart)
-    configTraj = np.zeros((waypoints, len(qStart)))
-    velJointTraj = np.zeros((waypoints, len(qStart)))
-    T_target = SE3()
-    qIK = start_pose_rad
     penalty = 0
     # --- Main loop: IK + null-space optimization + smoothing ---
     for i in range(waypoints):
@@ -664,6 +716,15 @@ for i in range(waypoints_input-1):
     for j in range(num_joints):
         cs = CubicSpline(t_waypoints, configTraj[:,j], bc_type='clamped')  # clamped ensures zero slope at ends
         allConfigTraj[:, j] = cs(t_samples)
+
+
+    if parkpose_check:
+        # ---------ADJUSTMENT-----------#
+        find_pos_traj_end = find_pos_traj[-1]
+        allConfigTraj_goal_start = allConfigTraj[0]
+        transition_traj_gen = jtraj(find_pos_traj_end, allConfigTraj_goal_start, 50)
+        transition_traj = transition_traj_gen.q
+        allConfigTraj = np.concatenate((find_pos_traj, transition_traj, allConfigTraj))
 
     # --- Final smooth trajectory ---
     # allConfigTraj = np.hstack((configTraj, velJointTraj))

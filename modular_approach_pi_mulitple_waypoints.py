@@ -329,7 +329,6 @@ for i in range(waypoints_input-1):
         else:
             parkpose_check = False
 
-    print(reverse_check)
 
     if start_traj_size >0 and initial_check is False and startpose_check is False and reverse_check is True and parkpose_check is True:
         print("the initial trajectory is the previous goal trajectory")
