@@ -453,7 +453,7 @@ for i in range(waypoints_input-1):
         start().getZ()
     ])
 
-    GOAL_RADIUS = 0.1
+    GOAL_RADIUS = 0.3
     INITIAL_RADIUS = 0.3
     GOAL = 0.1
     treeReachedGoalRegion = {"value": False}  # mutable container
