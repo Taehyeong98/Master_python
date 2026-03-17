@@ -474,6 +474,35 @@ for i in range(waypoints_input-1):
             # --------------------#
             #    Singularity     #
             # --------------------#
+            # Cube 1 dimensions
+            x1 = [1.0, 1.2]
+            y1 = [0.6, 0.7]
+            z1 = [0.5, 0.84]
+
+            size1 = [x1[1] - x1[0], y1[1] - y1[0], z1[1] - z1[0]]
+            center1 = [(x1[0] + x1[1]) / 2, (y1[0] + y1[1]) / 2, (z1[0] + z1[1]) / 2]
+
+            box1 = fcl.Box(*size1)
+            box1_obj = fcl.CollisionObject(box1)
+
+            tf1 = fcl.Transform(np.eye(3), np.array(center1))
+            box1_obj.setTransform(tf1)
+
+            # Cube 2 dimensions
+            x2 = [1.0, 1.2]
+            y2 = [0.3, 0.6]
+            z2 = [0.38, 0.5]
+
+            size2 = [x2[1] - x2[0], y2[1] - y2[0], z2[1] - z2[0]]
+            center2 = [(x2[0] + x2[1]) / 2, (y2[0] + y2[1]) / 2, (z2[0] + z2[1]) / 2]
+
+            box2 = fcl.Box(*size2)
+            box2_obj = fcl.CollisionObject(box2)
+
+            tf2 = fcl.Transform(np.eye(3), np.array(center2))
+            box2_obj.setTransform(tf2)
+
+
             Radius = 0.02
             s1 = fcl.Sphere(Radius)
             s1_obj = fcl.CollisionObject(s1)
@@ -933,7 +962,7 @@ for i in range(waypoints_input-1):
             #    Move FORWARDS    #
             # --------------------#
 
-            move_forwards_rad =[park_pose_end_rad[0],2.227695,1.138400,-0.685912,0.964475,-1.300536,-0.367489]
+            move_forwards_rad =[park_pose_end_rad[0],2.452,1.768,-0.008,-0.514,1.156,0.752]
             find_pos_traj_gen = jtraj(park_pose_end_rad, move_forwards_rad, 100)
             find_pos_traj = find_pos_traj_gen.q
             find_pos_q = find_pos_traj[-1]

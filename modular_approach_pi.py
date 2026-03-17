@@ -85,6 +85,19 @@ def singularity_gradient(q, body_name):
     return grad
 
 
+def create_box(x_range, y_range, z_range):
+    size = [x_range[1] - x_range[0],
+            y_range[1] - y_range[0],
+            z_range[1] - z_range[0]]
+    center = [(x_range[0] + x_range[1]) / 2,
+              (y_range[0] + y_range[1]) / 2,
+              (z_range[0] + z_range[1]) / 2]
+
+    box = fcl.Box(*size)
+    obj = fcl.CollisionObject(box)
+    obj.setTransform(fcl.Transform(np.eye(3), np.array(center)))
+    return obj
+
 def validityChecker(state):
     # Extract SE3 state
     s = state  # already SE3 state in Python
@@ -424,6 +437,7 @@ if initial_check is False and startpose_check is False and reverse_check is Fals
         # --------------------#
         #    Singularity     #
         # --------------------#
+
         Radius = 0.02
         s1 = fcl.Sphere(Radius)
         s1_obj = fcl.CollisionObject(s1)
