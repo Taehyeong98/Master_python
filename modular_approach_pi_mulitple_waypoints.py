@@ -215,8 +215,8 @@ for i in range(waypoints_input-1):
 
     start_time = time.time()
 
-    address = "/home/pi/Desktop/Master_python/"
-    #address = "/Users/kim/PycharmProjects/JupyterProject/"
+    #address = "/home/pi/Desktop/Master_python/"
+    address = "/Users/kim/PycharmProjects/JupyterProject/"
     robotId=bc.loadURDF(address + "imed_robot_update.urdf")
     position = [0.55, 0.35, -0.55]        # must be length 3
     # Axis-angle
@@ -268,7 +268,7 @@ for i in range(waypoints_input-1):
     # Cube 2 dimensions
     x2 = [1.2, 1.27]
     y2 = [0.27, 0.6]
-    z2 = [0.38, 0.5]
+    z2 = [0.38, 0.48]
 
     size2 = [x2[1] - x2[0], y2[1] - y2[0], z2[1] - z2[0]]
     center2 = [(x2[0] + x2[1]) / 2, (y2[0] + y2[1]) / 2, (z2[0] + z2[1]) / 2]
@@ -307,7 +307,7 @@ for i in range(waypoints_input-1):
     T_target.R = R.from_quat(goal_ori).as_matrix()
 
     # park pose
-    const = 0.2
+    const = 0.001
     if goal_pos[0] > start_pose_rad[0]:
         park_0 = goal_pos[0]-const
     else:
@@ -945,8 +945,8 @@ for i in range(waypoints_input-1):
             bc.stepSimulation()
 
             contacts_env = bc.getClosestPoints(robotId, obstacleId, distance=-0.05)
-            contacts_robot1 = bc.getClosestPoints(robotId, body1, distance=0.0001)
-            contacts_robot2 = bc.getClosestPoints(robotId, body2, distance=0.0001)
+            contacts_robot1 = bc.getClosestPoints(robotId, body1, distance=-0.03)
+            contacts_robot2 = bc.getClosestPoints(robotId, body2, distance=-0.03)
 
             for contact in contacts_env:
                 if contact[8] < 0:  # penetration
@@ -954,11 +954,11 @@ for i in range(waypoints_input-1):
                     goal_trajectory_check = False
 
             for contact_2 in contacts_robot1:
-                if contact_2[8] < 0.0001:  # penetration
+                if contact_2[8] < -0.03:  # penetration
                     print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_2[8]}")
                     goal_trajectory_check = False
             for contact_3 in contacts_robot2:
-                if contact_3[8] < 0.0001:  # penetration
+                if contact_3[8] < -0.03:  # penetration
                     print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_3[8]}")
                     goal_trajectory_check = False
 
@@ -1090,7 +1090,7 @@ for i in range(waypoints_input-1):
             tf_box = fcl.Transform(np.eye(3), blockCenter)
             groundBlock.setTransform(tf_box)
             # Cube 2 dimensions
-            inflation =0.05
+            inflation =0.075
             x2_inflation = [1.2-inflation, 1.27+inflation]
             y2_inflation = [0.27-inflation, 0.6+inflation]
             z2_inflation = [0.38-inflation, 0.5+inflation]
@@ -1405,19 +1405,19 @@ for i in range(waypoints_input-1):
         bc.stepSimulation()
 
         contacts_env = bc.getClosestPoints(robotId, obstacleId, distance=-0.05)
-        contacts_robot1 = bc.getClosestPoints(robotId, body1, distance=0.0001)
-        contacts_robot2 = bc.getClosestPoints(robotId, body2, distance=0.0001)
+        contacts_robot1 = bc.getClosestPoints(robotId, body1, distance=-0.03)
+        contacts_robot2 = bc.getClosestPoints(robotId, body2, distance=-0.03)
         for contact in contacts_env:
             if contact[8] < 0:  # penetration
                 print(f"Collision at waypoint {waypoint_idx}{contact[8]}")
                 initial_collision_check = False
 
         for contact_2 in contacts_robot1:
-            if contact_2[8] < 0.0001:  # penetration
+            if contact_2[8] < -0.03:  # penetration
                 print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_2[8]}")
                 initial_collision_check = False
         for contact_3 in contacts_robot2:
-            if contact_3[8] < 0.0001:  # penetration
+            if contact_3[8] < -0.03:  # penetration
                 print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_3[8]}")
                 initial_collision_check = False
 

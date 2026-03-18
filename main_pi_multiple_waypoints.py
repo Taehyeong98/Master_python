@@ -287,8 +287,8 @@ for i in range(waypoints_input-1):
     #     ROBOT URDF     #
     # --------------------#
     # Load URDF of Robot
-    #adress = "/Users/kim/PycharmProjects/JupyterProject/"
-    adress = "/home/pi/Desktop/Master_python/"
+    adress = "/Users/kim/PycharmProjects/JupyterProject/"
+    #adress = "/home/pi/Desktop/Master_python/"
     robot = rtb.Robot.URDF(adress + "imed_robot_update.urdf")
 
     print("robot urdf initialized")
@@ -343,7 +343,7 @@ for i in range(waypoints_input-1):
     # Cube 2 dimensions
     x2 = [1.2, 1.27]
     y2 = [0.27, 0.6]
-    z2 = [0.38, 0.5]
+    z2 = [0.38, 0.48]
 
     size2 = [x2[1] - x2[0], y2[1] - y2[0], z2[1] - z2[0]]
     center2 = [(x2[0] + x2[1]) / 2, (y2[0] + y2[1]) / 2, (z2[0] + z2[1]) / 2]
