@@ -23,9 +23,6 @@ from roboticstoolbox import jtraj
 import fcl
 import time
 
-from main_pi_multiple_waypoints import box3_obj, box4_obj
-
-
 def mapToNearest(q_prev, q_new):
     """
     Map q_new to the nearest equivalent configuration relative to q_prev.
@@ -303,6 +300,7 @@ for i in range(waypoints_input-1):
     initial_collision_check = True
     goal_trajectory_check = True
     STL_check = False
+    hard_to_reach_check = False
     #----------INITIAL CHECK----------#
     if initial_region:
         print("the goal is in initial region and the initial movement is skipped")
@@ -368,7 +366,34 @@ for i in range(waypoints_input-1):
             counter = counter + 1
             if counter > 10:
                 print("GOAL POSITION is not reachable!!")
-                sys.exit()
+                print("move little forward and try again")
+                # --------------------#
+                #    Move FORWARDS    #
+                # --------------------#
+
+                move_forwards_rad = [park_pose_end_rad[0], -0.6896, 2.268, -0.4, -0.514, 1.156, 0.752]
+                find_pos_traj_gen = jtraj(park_pose_end_rad, move_forwards_rad, 100)
+                find_pos_traj = find_pos_traj_gen.q
+                find_pos_q = find_pos_traj[-1]
+                FK_park_to_find_pos = robot.fkine(find_pos_q)
+                find_pos_position = FK_park_to_find_pos.t
+                find_pos_quat = R.from_matrix(FK_park_to_find_pos.R).as_quat()
+                post_counter = 0
+
+                solver = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
+                                        q0=move_forwards_rad)  # replace with your Python IK function
+                while (solver.success == False):
+                    print("IK solver failed, try again")
+                    solver = robot.ikine_LM(Tep=T_target, mask=weights, joint_limits=True, method='sugihara', k=0.0001,
+                                            q0=move_forwards_rad)  # replace with your Python
+                    post_counter = post_counter + 1
+                    if post_counter > 10:
+                        print("GOAL POSITION is not reachable!!")
+                        sys.exit()
+                hard_to_reach_check = True
+                print("Hard To Reach!!")
+
+
         q_sol = solver.q
         print("goal pose:",q_sol)
         goal_pose_q = q_sol  # 1x7
@@ -506,6 +531,32 @@ for i in range(waypoints_input-1):
             tf2 = fcl.Transform(np.eye(3), np.array(center2))
             box2_obj.setTransform(tf2)
 
+            x3 = [0, 0.5]
+            y3 = [0, 0.05]
+            z3 = [0, 0.84]
+
+            size3 = [x3[1] - x3[0], y3[1] - y3[0], z3[1] - z3[0]]
+            center3 = [(x3[0] + x3[1]) / 2, (y3[0] + y3[1]) / 2, (z3[0] + z3[1]) / 2]
+
+            box3 = fcl.Box(*size3)
+            box3_obj = fcl.CollisionObject(box3)
+
+            tf3 = fcl.Transform(np.eye(3), np.array(center3))
+            box3_obj.setTransform(tf3)
+
+            x4 = [0.2, 0.3]
+            y4 = [0.05, 0.1]
+            z4 = [0.45, 0.5]
+
+            size4 = [x4[1] - x4[0], y4[1] - y4[0], z4[1] - z4[0]]
+            center4 = [(x4[0] + x4[1]) / 2, (y4[0] + y4[1]) / 2, (z4[0] + z4[1]) / 2]
+
+            box4 = fcl.Box(*size4)
+            box4_obj = fcl.CollisionObject(box4)
+
+            tf4 = fcl.Transform(np.eye(3), np.array(center4))
+            box4_obj.setTransform(tf4)
+
 
             Radius = 0.02
             s1 = fcl.Sphere(Radius)
@@ -557,7 +608,7 @@ for i in range(waypoints_input-1):
             # --------------------#
             # Load URDF of Robot
 
-            robot = rtb.Robot.URDF(address + "imed_robot_pi.urdf")
+            robot = rtb.Robot.URDF(address + "imed_robot_update.urdf")
 
             print("robot urdf initialized")
 
@@ -837,8 +888,12 @@ for i in range(waypoints_input-1):
             linear_movement[i] = q_current
 
         park_pose_rad_end_linear = linear_movement[linear_time-1,:]
-
-        traj = jtraj(park_pose_rad_end_linear, goal_pose_q, 500)
+        if hard_to_reach_check:
+            linear_movement = np.concatenate((linear_movement, find_pos_traj))
+            park_pose_rad_end_linear_extended = linear_movement[linear_time-1,:]
+            traj = jtraj(park_pose_rad_end_linear_extended, goal_pose_q, 500)
+        else:
+            traj = jtraj(park_pose_rad_end_linear, goal_pose_q, 500)
 
         # --------------------#
         #  COLLISION CHECK   #
@@ -974,9 +1029,59 @@ for i in range(waypoints_input-1):
             find_pos_position = FK_park_to_find_pos.t
             find_pos_quat = R.from_matrix(FK_park_to_find_pos.R).as_quat()
 
+            # Cube 1 dimensions
+            x1 = [1.0, 1.2]
+            y1 = [0.6, 0.7]
+            z1 = [0.5, 0.84]
 
+            size1 = [x1[1] - x1[0], y1[1] - y1[0], z1[1] - z1[0]]
+            center1 = [(x1[0] + x1[1]) / 2, (y1[0] + y1[1]) / 2, (z1[0] + z1[1]) / 2]
 
+            box1 = fcl.Box(*size1)
+            box1_obj = fcl.CollisionObject(box1)
 
+            tf1 = fcl.Transform(np.eye(3), np.array(center1))
+            box1_obj.setTransform(tf1)
+
+            # Cube 2 dimensions
+            x2 = [1.0, 1.2]
+            y2 = [0.3, 0.6]
+            z2 = [0.38, 0.5]
+
+            size2 = [x2[1] - x2[0], y2[1] - y2[0], z2[1] - z2[0]]
+            center2 = [(x2[0] + x2[1]) / 2, (y2[0] + y2[1]) / 2, (z2[0] + z2[1]) / 2]
+
+            box2 = fcl.Box(*size2)
+            box2_obj = fcl.CollisionObject(box2)
+
+            tf2 = fcl.Transform(np.eye(3), np.array(center2))
+            box2_obj.setTransform(tf2)
+
+            x3 = [0, 0.5]
+            y3 = [0, 0.05]
+            z3 = [0, 0.84]
+
+            size3 = [x3[1] - x3[0], y3[1] - y3[0], z3[1] - z3[0]]
+            center3 = [(x3[0] + x3[1]) / 2, (y3[0] + y3[1]) / 2, (z3[0] + z3[1]) / 2]
+
+            box3 = fcl.Box(*size3)
+            box3_obj = fcl.CollisionObject(box3)
+
+            tf3 = fcl.Transform(np.eye(3), np.array(center3))
+            box3_obj.setTransform(tf3)
+
+            x4 = [0.2, 0.3]
+            y4 = [0.05, 0.1]
+            z4 = [0.45, 0.5]
+
+            size4 = [x4[1] - x4[0], y4[1] - y4[0], z4[1] - z4[0]]
+            center4 = [(x4[0] + x4[1]) / 2, (y4[0] + y4[1]) / 2, (z4[0] + z4[1]) / 2]
+
+            box4 = fcl.Box(*size4)
+            box4_obj = fcl.CollisionObject(box4)
+
+            tf4 = fcl.Transform(np.eye(3), np.array(center4))
+            box4_obj.setTransform(tf4)
 
             # --------------------#
             #    Path Planner    #

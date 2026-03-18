@@ -289,7 +289,7 @@ for i in range(waypoints_input-1):
     # Load URDF of Robot
     #adress = "/Users/kim/PycharmProjects/JupyterProject/"
     adress = "/home/pi/Desktop/Master_python/"
-    robot = rtb.Robot.URDF(adress + "imed_robot_pi.urdf")
+    robot = rtb.Robot.URDF(adress + "imed_robot_update.urdf")
 
     print("robot urdf initialized")
 
@@ -573,7 +573,7 @@ for i in range(waypoints_input-1):
     planning_time = end_plan - start_plan
     print("Planning time:", end_plan - start_plan)
 
-    robotId = bc.loadURDF( "imed_robot_pi.urdf")
+    robotId = bc.loadURDF( "imed_robot_update.urdf")
     position = [0.35, 0.35, -0.55]  # must be length 3
     # Axis-angle
     angle = -np.pi / 4  # rotation angle in radians
