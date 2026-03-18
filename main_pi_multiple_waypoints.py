@@ -420,7 +420,7 @@ for i in range(waypoints_input-1):
     groundBlock.setTransform(tf_box)
 
     # Cube 2 dimensions
-    inflation = 0.05
+    inflation = 0.02
     x2_inflation = [1.2 - inflation, 1.27 + inflation]
     y2_inflation = [0.27 - inflation, 0.6 + inflation]
     z2_inflation = [0.38 - inflation, 0.5 + inflation]
