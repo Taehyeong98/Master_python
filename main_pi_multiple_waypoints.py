@@ -777,9 +777,9 @@ for i in range(waypoints_input-1):
                 print(f"Collision at waypoint {waypoint_idx}{contact[8]}")
                 initial_collision_check = False
 
-        contacts_robot1 = bc.getClosestPoints(robotId, body1, distance=0.0001)
-        contacts_robot2 = bc.getClosestPoints(robotId, body2, distance=0.0001)
-
+        #contacts_robot1 = bc.getClosestPoints(robotId, body1, distance=0.0001)
+        #contacts_robot2 = bc.getClosestPoints(robotId, body2, distance=0.0001)
+        """
         for contact_2 in contacts_robot1:
             if contact_2[8] < 0.0001:  # penetration
                 print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_2[8]}")
@@ -788,7 +788,7 @@ for i in range(waypoints_input-1):
             if contact_3[8] < 0.0001:  # penetration
                 print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_3[8]}")
                 goal_trajectory_check = False
-
+        """
         contacts_self_raw = bc.getClosestPoints(robotId, robotId, distance=0.001)
         unique_pairs = set()
         for c in contacts_self_raw:
