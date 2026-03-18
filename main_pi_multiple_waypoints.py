@@ -111,8 +111,8 @@ def validityChecker(state):
         req = fcl.CollisionRequest()
         res = fcl.CollisionResult()
         fcl.collide(path_point, obj, req, res)
-        fcl.collide(path_point, box1_obj, req, res)
-        fcl.collide(path_point, box2_obj, req, res)
+        #fcl.collide(path_point, box1_obj, req, res)
+        #fcl.collide(path_point, box2_obj, req, res)
         if res.is_collision:
             return False
         return True
@@ -122,8 +122,8 @@ def validityChecker(state):
         req = fcl.CollisionRequest()
         res = fcl.CollisionResult()
         fcl.collide(path_point, groundBlock, req, res)
-        fcl.collide(path_point, box1_obj, req, res)
-        fcl.collide(path_point, box2_obj, req, res)
+        #fcl.collide(path_point, box1_obj, req, res)
+        #fcl.collide(path_point, box2_obj, req, res)
         if res.is_collision:
             return False
         return True
