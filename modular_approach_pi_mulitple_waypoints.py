@@ -86,33 +86,43 @@ def singularity_gradient(q, body_name):
 
 
 def validityChecker(state):
-    # Extract SE3 state
-    s = state  # already SE3 state in Python
-    pos = np.array([s.getX(), s.getY(), s.getZ()])
-    GOAL = 0.1
-    # ------------- 2️⃣ Move robot (sphere) -------------
+    pos = np.array([state.getX(), state.getY(), state.getZ()])
+
     tf = fcl.Transform(np.eye(3), pos)
     path_point.setTransform(tf)
 
-    # Precompute distances
     dist_goal = np.linalg.norm(pos - goalPos)
     dist_start = np.linalg.norm(pos - startPos)
-
+    GOAL_RADIUS = 0.3
+    INITIAL_RADIUS = 0.3
+    inGoalRegion = dist_goal < GOAL_RADIUS
+    inInitialRegion = dist_start < INITIAL_RADIUS
 
     # Goal reached
     if dist_goal < GOAL:
         return True
 
     # Inside special regions → patient collision only
-    req = fcl.CollisionRequest()
-    res = fcl.CollisionResult()
-    fcl.collide(path_point, obj, req, res)
-    fcl.collide(path_point, box3_obj, req, res)
-    fcl.collide(path_point, box4_obj, req, res)
+    if inGoalRegion or inInitialRegion:
+        req = fcl.CollisionRequest()
+        res = fcl.CollisionResult()
+        fcl.collide(path_point, obj, req, res)
+        fcl.collide(path_point, box1_obj, req, res)
+        fcl.collide(path_point, box2_obj, req, res)
+        if res.is_collision:
+            return False
+        return True
 
-    if res.is_collision:
-        return False
-    return True
+    # Outside regions → ground collision only
+    else:
+        req = fcl.CollisionRequest()
+        res = fcl.CollisionResult()
+        fcl.collide(path_point, groundBlock, req, res)
+        fcl.collide(path_point, box1_obj, req, res)
+        fcl.collide(path_point, box2_obj, req, res)
+        if res.is_collision:
+            return False
+        return True
 
 
 
@@ -205,8 +215,8 @@ for i in range(waypoints_input-1):
 
     start_time = time.time()
 
-    address = "/home/pi/Desktop/Master_python/"
-    #address = "/Users/kim/PycharmProjects/JupyterProject/"
+    #address = "/home/pi/Desktop/Master_python/"
+    address = "/Users/kim/PycharmProjects/JupyterProject/"
     robotId=bc.loadURDF(address + "imed_robot_update.urdf")
     position = [0.55, 0.35, -0.55]        # must be length 3
     # Axis-angle
@@ -233,9 +243,48 @@ for i in range(waypoints_input-1):
                                     basePosition=position,
                                     baseOrientation=orientation)
 
+    # CUBE 1
+    x1 = [1.2, 1.27]
+    y1 = [0.6, 0.7]
+    z1 = [0.3, 0.84]
 
+    size1 = [x1[1] - x1[0], y1[1] - y1[0], z1[1] - z1[0]]
+    center1 = [(x1[0] + x1[1]) / 2, (y1[0] + y1[1]) / 2, (z1[0] + z1[1]) / 2]
 
+    # PyBullet uses HALF extents
+    half_extents1 = [s / 2 for s in size1]
 
+    colBox1 = bc.createCollisionShape(
+        p.GEOM_BOX,
+        halfExtents=half_extents1
+    )
+
+    body1 = bc.createMultiBody(
+        baseMass=0,
+        baseCollisionShapeIndex=colBox1,
+        basePosition=center1
+    )
+    # CUBE 2
+    # Cube 2 dimensions
+    x2 = [1.2, 1.27]
+    y2 = [0.27, 0.6]
+    z2 = [0.38, 0.5]
+
+    size2 = [x2[1] - x2[0], y2[1] - y2[0], z2[1] - z2[0]]
+    center2 = [(x2[0] + x2[1]) / 2, (y2[0] + y2[1]) / 2, (z2[0] + z2[1]) / 2]
+
+    half_extents2 = [s / 2 for s in size2]
+
+    colBox2 = bc.createCollisionShape(
+        p.GEOM_BOX,
+        halfExtents=half_extents2
+    )
+
+    body2 = bc.createMultiBody(
+        baseMass=0,
+        baseCollisionShapeIndex=colBox2,
+        basePosition=center2
+    )
 
     # Load URDF of Robot
     robot = rtb.Robot.URDF( address+"imed_robot_update.urdf")
@@ -504,26 +553,12 @@ for i in range(waypoints_input-1):
             #    Singularity     #
             # --------------------#
             # Cube 1 dimensions
-            x1 = [1.0, 1.2]
-            y1 = [0.6, 0.7]
-            z1 = [0.5, 0.84]
-
-            size1 = [x1[1] - x1[0], y1[1] - y1[0], z1[1] - z1[0]]
-            center1 = [(x1[0] + x1[1]) / 2, (y1[0] + y1[1]) / 2, (z1[0] + z1[1]) / 2]
 
             box1 = fcl.Box(*size1)
             box1_obj = fcl.CollisionObject(box1)
 
             tf1 = fcl.Transform(np.eye(3), np.array(center1))
             box1_obj.setTransform(tf1)
-
-            # Cube 2 dimensions
-            x2 = [1.0, 1.2]
-            y2 = [0.3, 0.6]
-            z2 = [0.38, 0.5]
-
-            size2 = [x2[1] - x2[0], y2[1] - y2[0], z2[1] - z2[0]]
-            center2 = [(x2[0] + x2[1]) / 2, (y2[0] + y2[1]) / 2, (z2[0] + z2[1]) / 2]
 
             box2 = fcl.Box(*size2)
             box2_obj = fcl.CollisionObject(box2)
@@ -910,9 +945,21 @@ for i in range(waypoints_input-1):
             bc.stepSimulation()
 
             contacts_env = bc.getClosestPoints(robotId, obstacleId, distance=-0.05)
+            contacts_robot1 = bc.getClosestPoints(robotId, body1, distance=0.0001)
+            contacts_robot2 = bc.getClosestPoints(robotId, body2, distance=0.0001)
+
             for contact in contacts_env:
                 if contact[8] < 0:  # penetration
                     print(f"Collision at waypoint {waypoint_idx}{contact[8]}")
+                    goal_trajectory_check = False
+
+            for contact_2 in contacts_robot1:
+                if contact_2[8] < 0.0001:  # penetration
+                    print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_2[8]}")
+                    goal_trajectory_check = False
+            for contact_3 in contacts_robot2:
+                if contact_3[8] < 0.0001:  # penetration
+                    print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_3[8]}")
                     goal_trajectory_check = False
 
             contacts_self_raw = bc.getClosestPoints(robotId, robotId, distance=0.001)
@@ -1020,7 +1067,6 @@ for i in range(waypoints_input-1):
             # --------------------#
             #    Move FORWARDS    #
             # --------------------#
-
             move_forwards_rad =[park_pose_end_rad[0],2.452, 1.768, -0.4, -0.514, 1.156, 0.752]
             find_pos_traj_gen = jtraj(park_pose_end_rad, move_forwards_rad, 100)
             find_pos_traj = find_pos_traj_gen.q
@@ -1029,13 +1075,29 @@ for i in range(waypoints_input-1):
             find_pos_position = FK_park_to_find_pos.t
             find_pos_quat = R.from_matrix(FK_park_to_find_pos.R).as_quat()
 
-            # Cube 1 dimensions
-            x1 = [1.0, 1.2]
-            y1 = [0.6, 0.7]
-            z1 = [0.5, 0.84]
+            groundBlockShape = fcl.Box(blockLength, blockWidth, blockHeight)
 
-            size1 = [x1[1] - x1[0], y1[1] - y1[0], z1[1] - z1[0]]
-            center1 = [(x1[0] + x1[1]) / 2, (y1[0] + y1[1]) / 2, (z1[0] + z1[1]) / 2]
+            groundBlock = fcl.CollisionObject(groundBlockShape)
+
+            # Compute block center
+            blockCenter = np.array([
+                0.5 * (xMin + xMax),
+                0.5 * (yMin + yMax),
+                blockHeight / 2.0
+            ], dtype=np.float64)
+
+            # Set transform
+            tf_box = fcl.Transform(np.eye(3), blockCenter)
+            groundBlock.setTransform(tf_box)
+            # Cube 2 dimensions
+            inflation =0.05
+            x2_inflation = [1.2-inflation, 1.27+inflation]
+            y2_inflation = [0.27-inflation, 0.6+inflation]
+            z2_inflation = [0.38-inflation, 0.5+inflation]
+
+
+            size2_inflation = [x2_inflation[1] - x2_inflation[0], y2_inflation[1] - y2_inflation[0], z2_inflation[1] - z2_inflation[0]]
+            center2_inflation = [(x2_inflation[0] + x2_inflation[1]) / 2, (y2_inflation[0] + y2_inflation[1]) / 2, (z2_inflation[0] + z2_inflation[1]) / 2]
 
             box1 = fcl.Box(*size1)
             box1_obj = fcl.CollisionObject(box1)
@@ -1043,32 +1105,11 @@ for i in range(waypoints_input-1):
             tf1 = fcl.Transform(np.eye(3), np.array(center1))
             box1_obj.setTransform(tf1)
 
-            # Cube 2 dimensions
-            x2 = [1.0, 1.2]
-            y2 = [0.3, 0.6]
-            z2 = [0.38, 0.5]
-
-            size2 = [x2[1] - x2[0], y2[1] - y2[0], z2[1] - z2[0]]
-            center2 = [(x2[0] + x2[1]) / 2, (y2[0] + y2[1]) / 2, (z2[0] + z2[1]) / 2]
-
-            box2 = fcl.Box(*size2)
+            box2 = fcl.Box(*size2_inflation)
             box2_obj = fcl.CollisionObject(box2)
 
-            tf2 = fcl.Transform(np.eye(3), np.array(center2))
+            tf2 = fcl.Transform(np.eye(3), np.array(center2_inflation))
             box2_obj.setTransform(tf2)
-
-            x3 = [0, 0.5]
-            y3 = [0, 0.05]
-            z3 = [0, 0.84]
-
-            size3 = [x3[1] - x3[0], y3[1] - y3[0], z3[1] - z3[0]]
-            center3 = [(x3[0] + x3[1]) / 2, (y3[0] + y3[1]) / 2, (z3[0] + z3[1]) / 2]
-
-            box3 = fcl.Box(*size3)
-            box3_obj = fcl.CollisionObject(box3)
-
-            tf3 = fcl.Transform(np.eye(3), np.array(center3))
-            box3_obj.setTransform(tf3)
 
             x4 = [0.2, 0.3]
             y4 = [0.05, 0.1]
@@ -1364,10 +1405,22 @@ for i in range(waypoints_input-1):
         bc.stepSimulation()
 
         contacts_env = bc.getClosestPoints(robotId, obstacleId, distance=-0.05)
+        contacts_robot1 = bc.getClosestPoints(robotId, body1, distance=0.0001)
+        contacts_robot2 = bc.getClosestPoints(robotId, body2, distance=0.0001)
         for contact in contacts_env:
             if contact[8] < 0:  # penetration
                 print(f"Collision at waypoint {waypoint_idx}{contact[8]}")
                 initial_collision_check = False
+
+        for contact_2 in contacts_robot1:
+            if contact_2[8] < 0.0001:  # penetration
+                print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_2[8]}")
+                initial_collision_check = False
+        for contact_3 in contacts_robot2:
+            if contact_3[8] < 0.0001:  # penetration
+                print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_3[8]}")
+                initial_collision_check = False
+
 
         contacts_self_raw = bc.getClosestPoints(robotId, robotId, distance=0.001)
         unique_pairs = set()

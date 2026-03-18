@@ -111,8 +111,8 @@ def validityChecker(state):
         req = fcl.CollisionRequest()
         res = fcl.CollisionResult()
         fcl.collide(path_point, obj, req, res)
-        fcl.collide(path_point, box3_obj, req, res)
-        fcl.collide(path_point, box4_obj, req, res)
+        fcl.collide(path_point, box1_obj, req, res)
+        fcl.collide(path_point, box2_obj, req, res)
         if res.is_collision:
             return False
         return True
@@ -122,8 +122,8 @@ def validityChecker(state):
         req = fcl.CollisionRequest()
         res = fcl.CollisionResult()
         fcl.collide(path_point, groundBlock, req, res)
-        fcl.collide(path_point, box3_obj, req, res)
-        fcl.collide(path_point, box4_obj, req, res)
+        fcl.collide(path_point, box1_obj, req, res)
+        fcl.collide(path_point, box2_obj, req, res)
         if res.is_collision:
             return False
         return True
@@ -318,48 +318,48 @@ for i in range(waypoints_input-1):
     # --------------------#
     #    Singularity     #
     # --------------------#
-    # Cube 1 dimensions
-    x1 = [1.0, 1.2]
+    # CUBE 1
+    x1 = [1.2, 1.27]
     y1 = [0.6, 0.7]
-    z1 = [0.5, 0.84]
+    z1 = [0.3, 0.84]
 
     size1 = [x1[1] - x1[0], y1[1] - y1[0], z1[1] - z1[0]]
     center1 = [(x1[0] + x1[1]) / 2, (y1[0] + y1[1]) / 2, (z1[0] + z1[1]) / 2]
 
-    box1 = fcl.Box(*size1)
-    box1_obj = fcl.CollisionObject(box1)
+    # PyBullet uses HALF extents
+    half_extents1 = [s / 2 for s in size1]
 
-    tf1 = fcl.Transform(np.eye(3), np.array(center1))
-    box1_obj.setTransform(tf1)
+    colBox1 = bc.createCollisionShape(
+        p.GEOM_BOX,
+        halfExtents=half_extents1
+    )
 
+    body1 = bc.createMultiBody(
+        baseMass=0,
+        baseCollisionShapeIndex=colBox1,
+        basePosition=center1
+    )
+    # CUBE 2
     # Cube 2 dimensions
-    x2 = [1.0, 1.2]
-    y2 = [0.3, 0.6]
+    x2 = [1.2, 1.27]
+    y2 = [0.27, 0.6]
     z2 = [0.38, 0.5]
 
     size2 = [x2[1] - x2[0], y2[1] - y2[0], z2[1] - z2[0]]
     center2 = [(x2[0] + x2[1]) / 2, (y2[0] + y2[1]) / 2, (z2[0] + z2[1]) / 2]
 
-    box2 = fcl.Box(*size2)
-    box2_obj = fcl.CollisionObject(box2)
+    half_extents2 = [s / 2 for s in size2]
 
-    tf2 = fcl.Transform(np.eye(3), np.array(center2))
-    box2_obj.setTransform(tf2)
+    colBox2 = bc.createCollisionShape(
+        p.GEOM_BOX,
+        halfExtents=half_extents2
+    )
 
-
-    x3 = [0, 0.5]
-    y3 = [0, 0.05]
-    z3 = [0, 0.84]
-
-    size3 = [x3[1] - x3[0], y3[1] - y3[0], z3[1] - z3[0]]
-    center3 = [(x3[0] + x3[1]) / 2, (y3[0] + y3[1]) / 2, (z3[0] + z3[1]) / 2]
-
-    box3 = fcl.Box(*size3)
-    box3_obj = fcl.CollisionObject(box3)
-
-    tf3 = fcl.Transform(np.eye(3), np.array(center3))
-    box3_obj.setTransform(tf3)
-
+    body2 = bc.createMultiBody(
+        baseMass=0,
+        baseCollisionShapeIndex=colBox2,
+        basePosition=center2
+    )
     x4 = [0.2, 0.3]
     y4 = [0.05, 0.1]
     z4 = [0.45, 0.5]
@@ -419,7 +419,28 @@ for i in range(waypoints_input-1):
     tf_box = fcl.Transform(np.eye(3), blockCenter)
     groundBlock.setTransform(tf_box)
 
+    # Cube 2 dimensions
+    inflation = 0.05
+    x2_inflation = [1.2 - inflation, 1.27 + inflation]
+    y2_inflation = [0.27 - inflation, 0.6 + inflation]
+    z2_inflation = [0.38 - inflation, 0.5 + inflation]
 
+    size2_inflation = [x2_inflation[1] - x2_inflation[0], y2_inflation[1] - y2_inflation[0],
+                       z2_inflation[1] - z2_inflation[0]]
+    center2_inflation = [(x2_inflation[0] + x2_inflation[1]) / 2, (y2_inflation[0] + y2_inflation[1]) / 2,
+                         (z2_inflation[0] + z2_inflation[1]) / 2]
+
+    box1 = fcl.Box(*size1)
+    box1_obj = fcl.CollisionObject(box1)
+
+    tf1 = fcl.Transform(np.eye(3), np.array(center1))
+    box1_obj.setTransform(tf1)
+
+    box2 = fcl.Box(*size2_inflation)
+    box2_obj = fcl.CollisionObject(box2)
+
+    tf2 = fcl.Transform(np.eye(3), np.array(center2_inflation))
+    box2_obj.setTransform(tf2)
 
     # --------------------#
     #    Path Planner    #
@@ -755,6 +776,18 @@ for i in range(waypoints_input-1):
             if contact[8] < 0:  # penetration
                 print(f"Collision at waypoint {waypoint_idx}{contact[8]}")
                 initial_collision_check = False
+
+        contacts_robot1 = bc.getClosestPoints(robotId, body1, distance=0.0001)
+        contacts_robot2 = bc.getClosestPoints(robotId, body2, distance=0.0001)
+
+        for contact_2 in contacts_robot1:
+            if contact_2[8] < 0.0001:  # penetration
+                print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_2[8]}")
+                goal_trajectory_check = False
+        for contact_3 in contacts_robot2:
+            if contact_3[8] < 0.0001:  # penetration
+                print(f"Collision with co-robot at waypoint {waypoint_idx}{contact_3[8]}")
+                goal_trajectory_check = False
 
         contacts_self_raw = bc.getClosestPoints(robotId, robotId, distance=0.001)
         unique_pairs = set()
