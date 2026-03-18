@@ -1021,7 +1021,7 @@ for i in range(waypoints_input-1):
             #    Move FORWARDS    #
             # --------------------#
 
-            move_forwards_rad =[park_pose_end_rad[0],2.452,1.768,-0.008,-0.514,1.156,0.752]
+            move_forwards_rad =[park_pose_end_rad[0],2.452, 1.768, -0.4, -0.514, 1.156, 0.752]
             find_pos_traj_gen = jtraj(park_pose_end_rad, move_forwards_rad, 100)
             find_pos_traj = find_pos_traj_gen.q
             find_pos_q = find_pos_traj[-1]
