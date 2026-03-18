@@ -287,8 +287,8 @@ for i in range(waypoints_input-1):
     #     ROBOT URDF     #
     # --------------------#
     # Load URDF of Robot
-    adress = "/Users/kim/PycharmProjects/JupyterProject/"
-    #adress = "/home/pi/Desktop/Master_python/"
+    #adress = "/Users/kim/PycharmProjects/JupyterProject/"
+    adress = "/home/pi/Desktop/Master_python/"
     robot = rtb.Robot.URDF(adress + "imed_robot_update.urdf")
 
     print("robot urdf initialized")

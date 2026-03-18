@@ -307,7 +307,7 @@ for i in range(waypoints_input-1):
     T_target.R = R.from_quat(goal_ori).as_matrix()
 
     # park pose
-    const = 0.001
+    const = 0.3
     if goal_pos[0] > start_pose_rad[0]:
         park_0 = goal_pos[0]-const
     else:
@@ -949,7 +949,7 @@ for i in range(waypoints_input-1):
             #contacts_robot2 = bc.getClosestPoints(robotId, body2, distance=-0.03)
 
             for contact in contacts_env:
-                if contact[8] < 0:  # penetration
+                if contact[8] < -0.07:  # penetration
                     print(f"Collision at waypoint {waypoint_idx}{contact[8]}")
                     goal_trajectory_check = False
             '''
